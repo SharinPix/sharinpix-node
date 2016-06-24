@@ -1,10 +1,11 @@
 jsrsasign = require 'jsrsasign'
 superagent = require 'superagent'
+url = require 'url'
 
 class Sharinpix
-  constructor: (@id, @secret)->
-  api_url: (endpoint)->
-    "https://api.sharinpix.com/api/v1#{endpoint}"
+  constructor: (@options)->
+  api_url: (path)->
+    "#{@options.endpoint}#{path}"
   post: (endpoint, body, claims)->
     superagent
       .post(@api_url(endpoint))
@@ -54,12 +55,43 @@ class Sharinpix
         ).then (res)->
           res
   token: (claims)->
-    claims["iss"] = @id
+    console.log @options.id, @options.secret
+    claims["iss"] = @options.id
     token = jsrsasign.jws.JWS.sign(
       null,
       {alg: "HS256", cty: "JWT"},
       JSON.stringify(claims),
-      @secret
+      @options.secret
     )
     token
+
+_options = undefined
+Sharinpix.configure = (options)->
+  unless _options?
+    _options = {}
+    if process? and process.env? and process.env['SHARINPIX_URL']?
+      Sharinpix.configure(process.env['SHARINPIX_URL'])
+
+  if options?
+    if typeof(options) == 'string'
+      infos = url.parse(options)
+      auth = infos.auth.split(':')
+      _options.endpoint = "https://#{infos.hostname}#{infos.pathname}"
+      _options.id = auth[0]
+      _options.secret = auth[1]
+    else if options instanceof Object
+      for k, v of options
+        _options[k] = v
+
+  console.log _options
+  _options
+
+_singleton = undefined
+Sharinpix.get_instance = ->
+  return _singleton if _singleton?
+  _singleton = new Sharinpix(Sharinpix.configure())
+
+Sharinpix.upload = ->
+  Sharinpix.get_instance().upload(arguments...)
+
 module.exports = Sharinpix

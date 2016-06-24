@@ -1,8 +1,8 @@
 {
   "name": "sharinpix",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "SharinPix Client",
-  "main": "dist/sharinpix.js",
+  "main": "src/sharinpix.js",
   "scripts": {
     "test": "coffeelint src",
     "build": "webpack",
