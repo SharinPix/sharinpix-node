@@ -55,7 +55,6 @@ class Sharinpix
         ).then (res)->
           res
   token: (claims)->
-    console.log @options.id, @options.secret
     claims["iss"] = @options.id
     token = jsrsasign.jws.JWS.sign(
       null,
@@ -83,7 +82,6 @@ Sharinpix.configure = (options)->
       for k, v of options
         _options[k] = v
 
-  console.log _options
   _options
 
 _singleton = undefined

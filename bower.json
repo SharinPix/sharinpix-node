@@ -1,6 +1,6 @@
 {
   "name": "Sharinpix",
-  "descriptirn": "Sharinpix from Evlaa",
+  "descriptirn": "Sharinpix for an image powered salesforce",
   "main": "dist/sharinpix.js",
   "authors": [
     "Luc Boissaye"
@@ -8,8 +8,9 @@
   "license": "MIT",
   "keywords": [
     "Photos",
-    "Layout",
-    "Responsive"
+    "Sharinpix",
+    "Image",
+    "Salesforce"
   ],
   "homepage": "https://github.com/sharinpix/sharinpix-node",
   "ignore": [

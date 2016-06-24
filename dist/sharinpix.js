@@ -126,7 +126,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  Sharinpix.prototype.token = function (claims) {
 	    var token;
-	    console.log(this.options.id, this.options.secret);
 	    claims["iss"] = this.options.id;
 	    token = jsrsasign.jws.JWS.sign(null, {
 	      alg: "HS256",
@@ -162,7 +161,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	      }
 	    }
 	  }
-	  console.log(_options);
 	  return _options;
 	};
 
