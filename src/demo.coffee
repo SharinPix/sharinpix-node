@@ -1,13 +1,10 @@
 `import $ from 'jquery';`
-`import _ from 'lodash';`
 `import css from './demo.sass';`
 `export default {};`
 $ ->
-  Sharinpix = window.sharinpix
-  client = new Sharinpix(
-    '',
-    ''
-  )
-  $('input').change (e)->
+  $('input#files').change (e)->
+    window.sharinpix.configure($('#sharinpixurl').val())
+    console.log $('#sharinpixurl').val()
     for file in this.files
-      client.upload(file, 'super_test')
+      window.sharinpix.upload(file, 'super_test').then (image)->
+        console.log image
