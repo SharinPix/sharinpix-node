@@ -1,0 +1,29 @@
+{
+  "name": "Sharinpix",
+  "descriptirn": "Sharinpix from Evlaa",
+  "main": "dist/sharinpix.js",
+  "authors": [
+    "Luc Boissaye"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "Photos",
+    "Layout",
+    "Responsive"
+  ],
+  "homepage": "https://github.com/sharinpix/sharinpix-node",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "src/demo*",
+    "dist/demo*",
+    "src/index*",
+    "coffeelint.json",
+    "index.html",
+    "webpack.config.js",
+    "package.json"
+  ]
+}
