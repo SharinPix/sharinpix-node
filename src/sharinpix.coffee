@@ -60,7 +60,7 @@ class Sharinpix
       null,
       {alg: "HS256", cty: "JWT"},
       JSON.stringify(claims),
-      @options.secret
+      { rstr: @options.secret }
     )
     token
 
