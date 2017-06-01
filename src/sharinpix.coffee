@@ -54,6 +54,38 @@ class Sharinpix
           claims
         ).then (res)->
           res
+  zip_album: (album_id, options)->
+    console.log 'IN ZIP !'
+    return unless album_id?
+    options = {} unless options?
+    console.log 'album = ' + album_id
+    filename = (options.filename || 'Extract') + '.zip'
+    type = options.type || 'original' # USE FULL BY DEFAULT. original, full + add type: annotated but at original image size
+    claims = {
+      abilities: {
+        "#{album_id}": {
+          Access:
+            see: true,
+            image_list: true
+        }
+      }
+    }
+    all_images = []
+    get_all_images = new Promise((resolve, reject)->
+      page = 1
+      getter = ->
+        @get("/albums/" + album_id + "/images?page=" + page, claims).then (images)->
+          if (images.length == 0)
+            resolve(all_images)
+          else
+            all_images.push.apply(all_images, images)
+            page++
+            getter()
+      getter()
+    )
+    get_all_images.then (res_all_images)->
+      console.log 'res_all_images', res_all_images
+
   token: (claims)->
     claims["iss"] = @options.id
     token = jsrsasign.jws.JWS.sign(
