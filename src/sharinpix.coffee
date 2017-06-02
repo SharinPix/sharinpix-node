@@ -1,6 +1,9 @@
 jsrsasign = require 'jsrsasign'
 superagent = require 'superagent'
 url = require 'url'
+async = require 'async'
+JSZip = require 'jszip'
+save_file = require 'save-file'
 
 class Sharinpix
   constructor: (@options)->
@@ -54,13 +57,7 @@ class Sharinpix
           claims
         ).then (res)->
           res
-  zip_album: (album_id, options)->
-    console.log 'IN ZIP !'
-    return unless album_id?
-    options = {} unless options?
-    console.log 'album = ' + album_id
-    filename = (options.filename || 'Extract') + '.zip'
-    type = options.type || 'original' # USE FULL BY DEFAULT. original, full + add type: annotated but at original image size
+  get_album_images: (album_id, page_done, all_done)->
     claims = {
       abilities: {
         "#{album_id}": {
@@ -71,20 +68,91 @@ class Sharinpix
       }
     }
     all_images = []
-    get_all_images = new Promise((resolve, reject)->
-      page = 1
-      getter = ->
-        @get("/albums/" + album_id + "/images?page=" + page, claims).then (images)->
-          if (images.length == 0)
-            resolve(all_images)
-          else
-            all_images.push.apply(all_images, images)
-            page++
-            getter()
-      getter()
+    load_page = (page)=>
+      @get("/albums/" + album_id + "/images?page=" + page, claims).then (page_images)->
+        if (page_images.length == 0)
+          all_done(all_images)
+        else
+          all_images.push.apply(all_images, page_images)
+          page_done(page_images)
+          load_page(page + 1)
+    load_page(1)
+  download_images: (image_urls, one_done, all_done)->
+    console.log 'download_images'
+    _download_image = (url, done)->
+      superagent
+        .get(url)
+        # .responseType('blob')
+        .end((err, res)->
+          done(res.body) unless err?
+        )
+
+    q = async.queue(
+      (task, one_done)->
+        _download_image(task, one_done)
+      ,3
     )
-    get_all_images.then (res_all_images)->
-      console.log 'res_all_images', res_all_images
+    q.drain = ->
+      console.log 'q drained'
+      all_done()
+
+    image_urls.forEach((image_url)->
+      q.push(image_url, one_done)
+    )
+  zip_files: (blobs)->
+    console.log 'zip_files'
+    zip = new JSZip()
+    deferreds = []
+    blobs.forEach((blob)->
+      zip.file("name#{Math.random().toString(36).substr(2, 5)}.jpg", blob, { binary: true })
+    )
+    # save_file(
+    #   blobs[0],
+    #   'image.jpg',
+    #   (err)=>
+    #     console.log 'File saved !'
+    # )
+    zip.generateAsync({ type: "blob" })
+      .then((content)->
+        console.log 'zipping content', content
+        save_file(
+          content,
+          'Extract.zip',
+          (err)->
+            console.log 'done?'
+
+        )
+      )
+
+
+  zip_album: (album_id, options)->
+    return unless album_id?
+    options = {} unless options?
+    filename = (options.filename || 'Extract') + '.zip'
+    type = options.type || 'original' # USE FULL BY DEFAULT. original, full + add type: annotated but at original image size
+    _download_images = @download_images
+    _zip_files = @zip_files
+    @get_album_images(
+      album_id
+      ,(page_images)->
+        console.log "Page handling #{page_images.length}"
+      ,(all_images)->
+        image_urls = []
+        all_images.forEach((image)->
+          image_urls.push image.original_url
+        )
+        console.log "All handling #{all_images.length}"
+        all_blobs = []
+        _download_images(
+          image_urls
+          ,(body)->
+            console.log '1 file downloaded'
+            all_blobs.push(body)
+          ,->
+            console.log 'All files downloaded'
+            _zip_files(all_blobs)
+        )
+    )
 
   token: (claims)->
     claims["iss"] = @options.id

@@ -9,6 +9,9 @@ Sharinpix.configure('sharinpix://32953c6c-7b42-425d-a6b9-854366de3501:7uK9CSchCO
 # )
 
 sp = Sharinpix.get_instance()
-# sp.zip_album('00158000003NLMyAAO')
-sp.zip_album('500580000017zqEAAQ')
-# sp.zip_album('super_test')
+
+# album_id = '00158000003NLMyAAO' # >25 images
+album_id = '500580000017zqEAAQ' # 7 images
+
+# sp.download_images()
+sp.zip_album(album_id)
