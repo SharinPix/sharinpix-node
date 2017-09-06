@@ -21,7 +21,7 @@ class Sharinpix
       .set('Accept', 'application/json')
       .then (res)->
         res.body
-  upload: (image, album_id)->
+  upload: (image, album_id, metadatas = {})->
     claims = {
       "abilities": {}
     }
@@ -50,6 +50,7 @@ class Sharinpix
           {
             cloudinary: cloudinary
             album_id: album_id
+            metadatas: metadatas
           },
           claims
         ).then (res)->

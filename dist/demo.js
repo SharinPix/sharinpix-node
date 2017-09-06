@@ -83,7 +83,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    results = [];
 	    for (i = 0, len = ref.length; i < len; i++) {
 	      file = ref[i];
-	      results.push(window.sharinpix.upload(file, 'super_test').then(function (image) {
+	      results.push(window.sharinpix.upload(file, 'super_test', {
+	        externalId: 'just a test'
+	      }).then(function (image) {
 	        return console.log(image);
 	      }));
 	    }
