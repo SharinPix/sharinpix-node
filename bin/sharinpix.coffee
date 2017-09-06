@@ -14,10 +14,10 @@ module.exports = ->
       if image && albumId
         Sharinpix.configure sharinpixSecretUrl
         Sharinpix.upload(image, albumId, JSON.parse metadatas).then (image) ->
-          console.log image
+          console.log image, 'SUCCESS'
         , (error) ->
-          console.log error
+          console.log error, 'ERROR'
       else
         console.log 'Wrong parameters'
     else
-      console.log 'Please use appropriate action. Available:\n  upload [ image path ] [ album id ] ([ JSON metadatas ])'
+      console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]'

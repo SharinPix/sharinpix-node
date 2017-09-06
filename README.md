@@ -27,3 +27,17 @@ configure like this :
 ```
 Sharinpix.configure('<Sharinpix-secret-url>');
 ```
+
+# SharinPix command line tool
+
+## Installing SharinPix globally
+
+`npm install -g sharinpix`
+
+## Set environment variable
+
+Run `export SHARINPIX_URL="YOUR_SHARINPIX_SECRET_URL"` on your terminal or set `SHARINPIX_URL` permanently to your enviroment variable.
+
+## Upload
+
+Run `sharinpix upload <image path> <album id> [<json metadatas>]` on your terminal.
