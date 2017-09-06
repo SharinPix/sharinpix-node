@@ -36,8 +36,8 @@ Sharinpix.configure('<Sharinpix-secret-url>');
 
 ## Set environment variable
 
-Run `export SHARINPIX_URL="YOUR_SHARINPIX_SECRET_URL"` on the terminal or set `SHARINPIX_URL` permanently to your enviroment variable.
+Run `export SHARINPIX_URL="YOUR_SHARINPIX_SECRET_URL"` on your terminal or set `SHARINPIX_URL` permanently to your enviroment variable.
 
 ## Upload
 
-Run `sharinpix upload <image path> <album id> [<json metadatas>]` on the terminal.
+Run `sharinpix upload <image path> <album id> [<json metadatas>]` on your terminal.
