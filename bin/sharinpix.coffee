@@ -19,5 +19,12 @@ module.exports = ->
           console.log error, 'ERROR'
       else
         console.log 'Wrong parameters'
+    when 'multiupload'
+      csv_filename = process.argv[3]
+      if csv_filename
+        Sharinpix.multiupload csv_filename
+        console.log 'CSV File is being processed'
+      else
+        console.log 'Wrong parameters'
     else
-      console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]'
+      console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]\n  multiupload <csv file>'

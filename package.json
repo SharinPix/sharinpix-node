@@ -47,8 +47,10 @@
     "webpack-dev-server": "1.14.1"
   },
   "dependencies": {
+    "async": "^2.5.0",
+    "coffee-script": "1.10.0",
+    "fast-csv": "^2.4.0",
     "jsrsasign": "5.0.12",
-    "superagent": "2.0.0",
-    "coffee-script": "1.10.0"
+    "superagent": "2.0.0"
   }
 }

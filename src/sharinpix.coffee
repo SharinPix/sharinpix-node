@@ -1,6 +1,10 @@
 jsrsasign = require 'jsrsasign'
 superagent = require 'superagent'
 url = require 'url'
+fs = require 'fs'
+path = require 'path'
+async = require 'async'
+fastCsv = require 'fast-csv'
 
 class Sharinpix
   constructor: (@options)->
@@ -64,6 +68,23 @@ class Sharinpix
       { rstr: @options.secret }
     )
     token
+  multiupload: (csv_path, callback)->
+    contentStream = fs.createReadStream(csv_path)
+    csvStream = fastCsv()
+      .on 'data', (data)->
+        file_path = data[0] # Valid image path
+        album_id = data[1]  # Valid Salesforce ID (18-character)
+        if (file_path != null && file_path != undefined && album_id != null && album_id != undefined)
+          uploads.push (callback)=>
+            unless path.isAbsolute(file_path)
+              file_path = path.join csv_path, "../#{file_path}"
+            @upload(file_path, album_id)
+              .then (image)->
+                callback(null, image)
+              .catch (err)->
+                callback(err)
+    async.parallelLimit uploads, 2, callback
+    contentStream.pipe csvStream
 
 _options = undefined
 Sharinpix.configure = (options)->
@@ -91,6 +112,8 @@ Sharinpix.get_instance = ->
   _singleton = new Sharinpix(Sharinpix.configure())
 
 Sharinpix.upload = ->
-  Sharinpix.get_instance().upload(arguments...)
+  Sharinpix.get_instance().upload arguments...
+Sharinpix.multiupload = ->
+  Sharinpix.get_instance().multiupload arguments...
 
 module.exports = Sharinpix
