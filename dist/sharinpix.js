@@ -56,13 +56,21 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
 
-	var Sharinpix, _options, _singleton, jsrsasign, superagent, url;
+	var Sharinpix, _options, _singleton, async, fastCsv, fs, jsrsasign, path, superagent, url;
 
 	jsrsasign = __webpack_require__(7);
 
 	superagent = __webpack_require__(13);
 
 	url = __webpack_require__(19);
+
+	fs = __webpack_require__(12);
+
+	path = __webpack_require__(25);
+
+	async = __webpack_require__(26);
+
+	fastCsv = __webpack_require__(28);
 
 	Sharinpix = function () {
 	  function Sharinpix(options1) {
@@ -140,6 +148,34 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return token;
 	  };
 
+	  Sharinpix.prototype.multiupload = function (csv_path, callback) {
+	    var contentStream, csvStream, uploads;
+	    contentStream = fs.createReadStream(csv_path);
+	    uploads = [];
+	    csvStream = fastCsv().on('data', function (_this) {
+	      return function (data) {
+	        var album_id, file_path;
+	        file_path = data[0];
+	        album_id = data[1];
+	        if (file_path && album_id) {
+	          return uploads.push(function (callback) {
+	            if (!path.isAbsolute(file_path)) {
+	              file_path = path.join(csv_path, "../" + file_path);
+	            }
+	            return _this.upload(file_path, album_id).then(function (image) {
+	              return callback(null, image);
+	            })["catch"](function (err) {
+	              return callback(err);
+	            });
+	          });
+	        }
+	      };
+	    }(this)).on('end', function () {
+	      return async.parallelLimit(uploads, 2, callback);
+	    });
+	    return contentStream.pipe(csvStream);
+	  };
+
 	  return Sharinpix;
 	}();
 
@@ -182,6 +218,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	Sharinpix.upload = function () {
 	  var ref;
 	  return (ref = Sharinpix.get_instance()).upload.apply(ref, arguments);
+	};
+
+	Sharinpix.multiupload = function () {
+	  var ref;
+	  return (ref = Sharinpix.get_instance()).multiupload.apply(ref, arguments);
 	};
 
 	module.exports = Sharinpix;
@@ -5782,6 +5823,15372 @@ return /******/ (function(modules) { // webpackBootstrap
 	         encodeURIComponent(stringifyPrimitive(obj));
 	};
 
+
+/***/ },
+/* 25 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	// resolves . and .. elements in a path array with directory names there
+	// must be no slashes, empty elements, or device names (c:\) in the array
+	// (so also no leading and trailing slashes - it does not distinguish
+	// relative and absolute paths)
+	function normalizeArray(parts, allowAboveRoot) {
+	  // if the path tries to go above the root, `up` ends up > 0
+	  var up = 0;
+	  for (var i = parts.length - 1; i >= 0; i--) {
+	    var last = parts[i];
+	    if (last === '.') {
+	      parts.splice(i, 1);
+	    } else if (last === '..') {
+	      parts.splice(i, 1);
+	      up++;
+	    } else if (up) {
+	      parts.splice(i, 1);
+	      up--;
+	    }
+	  }
+
+	  // if the path is allowed to go above the root, restore leading ..s
+	  if (allowAboveRoot) {
+	    for (; up--; up) {
+	      parts.unshift('..');
+	    }
+	  }
+
+	  return parts;
+	}
+
+	// Split a filename into [root, dir, basename, ext], unix version
+	// 'root' is just a slash, or nothing.
+	var splitPathRe =
+	    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+	var splitPath = function(filename) {
+	  return splitPathRe.exec(filename).slice(1);
+	};
+
+	// path.resolve([from ...], to)
+	// posix version
+	exports.resolve = function() {
+	  var resolvedPath = '',
+	      resolvedAbsolute = false;
+
+	  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+	    var path = (i >= 0) ? arguments[i] : process.cwd();
+
+	    // Skip empty and invalid entries
+	    if (typeof path !== 'string') {
+	      throw new TypeError('Arguments to path.resolve must be strings');
+	    } else if (!path) {
+	      continue;
+	    }
+
+	    resolvedPath = path + '/' + resolvedPath;
+	    resolvedAbsolute = path.charAt(0) === '/';
+	  }
+
+	  // At this point the path should be resolved to a full absolute path, but
+	  // handle relative paths to be safe (might happen when process.cwd() fails)
+
+	  // Normalize the path
+	  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+	    return !!p;
+	  }), !resolvedAbsolute).join('/');
+
+	  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+	};
+
+	// path.normalize(path)
+	// posix version
+	exports.normalize = function(path) {
+	  var isAbsolute = exports.isAbsolute(path),
+	      trailingSlash = substr(path, -1) === '/';
+
+	  // Normalize the path
+	  path = normalizeArray(filter(path.split('/'), function(p) {
+	    return !!p;
+	  }), !isAbsolute).join('/');
+
+	  if (!path && !isAbsolute) {
+	    path = '.';
+	  }
+	  if (path && trailingSlash) {
+	    path += '/';
+	  }
+
+	  return (isAbsolute ? '/' : '') + path;
+	};
+
+	// posix version
+	exports.isAbsolute = function(path) {
+	  return path.charAt(0) === '/';
+	};
+
+	// posix version
+	exports.join = function() {
+	  var paths = Array.prototype.slice.call(arguments, 0);
+	  return exports.normalize(filter(paths, function(p, index) {
+	    if (typeof p !== 'string') {
+	      throw new TypeError('Arguments to path.join must be strings');
+	    }
+	    return p;
+	  }).join('/'));
+	};
+
+
+	// path.relative(from, to)
+	// posix version
+	exports.relative = function(from, to) {
+	  from = exports.resolve(from).substr(1);
+	  to = exports.resolve(to).substr(1);
+
+	  function trim(arr) {
+	    var start = 0;
+	    for (; start < arr.length; start++) {
+	      if (arr[start] !== '') break;
+	    }
+
+	    var end = arr.length - 1;
+	    for (; end >= 0; end--) {
+	      if (arr[end] !== '') break;
+	    }
+
+	    if (start > end) return [];
+	    return arr.slice(start, end - start + 1);
+	  }
+
+	  var fromParts = trim(from.split('/'));
+	  var toParts = trim(to.split('/'));
+
+	  var length = Math.min(fromParts.length, toParts.length);
+	  var samePartsLength = length;
+	  for (var i = 0; i < length; i++) {
+	    if (fromParts[i] !== toParts[i]) {
+	      samePartsLength = i;
+	      break;
+	    }
+	  }
+
+	  var outputParts = [];
+	  for (var i = samePartsLength; i < fromParts.length; i++) {
+	    outputParts.push('..');
+	  }
+
+	  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+	  return outputParts.join('/');
+	};
+
+	exports.sep = '/';
+	exports.delimiter = ':';
+
+	exports.dirname = function(path) {
+	  var result = splitPath(path),
+	      root = result[0],
+	      dir = result[1];
+
+	  if (!root && !dir) {
+	    // No dirname whatsoever
+	    return '.';
+	  }
+
+	  if (dir) {
+	    // It has a dirname, strip trailing slash
+	    dir = dir.substr(0, dir.length - 1);
+	  }
+
+	  return root + dir;
+	};
+
+
+	exports.basename = function(path, ext) {
+	  var f = splitPath(path)[2];
+	  // TODO: make this comparison case-insensitive on windows?
+	  if (ext && f.substr(-1 * ext.length) === ext) {
+	    f = f.substr(0, f.length - ext.length);
+	  }
+	  return f;
+	};
+
+
+	exports.extname = function(path) {
+	  return splitPath(path)[3];
+	};
+
+	function filter (xs, f) {
+	    if (xs.filter) return xs.filter(f);
+	    var res = [];
+	    for (var i = 0; i < xs.length; i++) {
+	        if (f(xs[i], i, xs)) res.push(xs[i]);
+	    }
+	    return res;
+	}
+
+	// String.prototype.substr - negative index don't work in IE8
+	var substr = 'ab'.substr(-1) === 'b'
+	    ? function (str, start, len) { return str.substr(start, len) }
+	    : function (str, start, len) {
+	        if (start < 0) start = str.length + start;
+	        return str.substr(start, len);
+	    }
+	;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 26 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(setImmediate, process, global, module) {(function (global, factory) {
+	   true ? factory(exports) :
+	  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+	  (factory((global.async = global.async || {})));
+	}(this, (function (exports) { 'use strict';
+
+	function slice(arrayLike, start) {
+	    start = start|0;
+	    var newLen = Math.max(arrayLike.length - start, 0);
+	    var newArr = Array(newLen);
+	    for(var idx = 0; idx < newLen; idx++)  {
+	        newArr[idx] = arrayLike[start + idx];
+	    }
+	    return newArr;
+	}
+
+	var initialParams = function (fn) {
+	    return function (/*...args, callback*/) {
+	        var args = slice(arguments);
+	        var callback = args.pop();
+	        fn.call(this, args, callback);
+	    };
+	};
+
+	/**
+	 * Checks if `value` is the
+	 * [language type](http://www.ecma-international.org/ecma-262/7.0/#sec-ecmascript-language-types)
+	 * of `Object`. (e.g. arrays, functions, objects, regexes, `new Number(0)`, and `new String('')`)
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an object, else `false`.
+	 * @example
+	 *
+	 * _.isObject({});
+	 * // => true
+	 *
+	 * _.isObject([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObject(_.noop);
+	 * // => true
+	 *
+	 * _.isObject(null);
+	 * // => false
+	 */
+	function isObject(value) {
+	  var type = typeof value;
+	  return value != null && (type == 'object' || type == 'function');
+	}
+
+	var hasSetImmediate = typeof setImmediate === 'function' && setImmediate;
+	var hasNextTick = typeof process === 'object' && typeof process.nextTick === 'function';
+
+	function fallback(fn) {
+	    setTimeout(fn, 0);
+	}
+
+	function wrap(defer) {
+	    return function (fn/*, ...args*/) {
+	        var args = slice(arguments, 1);
+	        defer(function () {
+	            fn.apply(null, args);
+	        });
+	    };
+	}
+
+	var _defer;
+
+	if (hasSetImmediate) {
+	    _defer = setImmediate;
+	} else if (hasNextTick) {
+	    _defer = process.nextTick;
+	} else {
+	    _defer = fallback;
+	}
+
+	var setImmediate$1 = wrap(_defer);
+
+	/**
+	 * Take a sync function and make it async, passing its return value to a
+	 * callback. This is useful for plugging sync functions into a waterfall,
+	 * series, or other async functions. Any arguments passed to the generated
+	 * function will be passed to the wrapped function (except for the final
+	 * callback argument). Errors thrown will be passed to the callback.
+	 *
+	 * If the function passed to `asyncify` returns a Promise, that promises's
+	 * resolved/rejected state will be used to call the callback, rather than simply
+	 * the synchronous return value.
+	 *
+	 * This also means you can asyncify ES2017 `async` functions.
+	 *
+	 * @name asyncify
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @alias wrapSync
+	 * @category Util
+	 * @param {Function} func - The synchronous function, or Promise-returning
+	 * function to convert to an {@link AsyncFunction}.
+	 * @returns {AsyncFunction} An asynchronous wrapper of the `func`. To be
+	 * invoked with `(args..., callback)`.
+	 * @example
+	 *
+	 * // passing a regular synchronous function
+	 * async.waterfall([
+	 *     async.apply(fs.readFile, filename, "utf8"),
+	 *     async.asyncify(JSON.parse),
+	 *     function (data, next) {
+	 *         // data is the result of parsing the text.
+	 *         // If there was a parsing error, it would have been caught.
+	 *     }
+	 * ], callback);
+	 *
+	 * // passing a function returning a promise
+	 * async.waterfall([
+	 *     async.apply(fs.readFile, filename, "utf8"),
+	 *     async.asyncify(function (contents) {
+	 *         return db.model.create(contents);
+	 *     }),
+	 *     function (model, next) {
+	 *         // `model` is the instantiated model object.
+	 *         // If there was an error, this function would be skipped.
+	 *     }
+	 * ], callback);
+	 *
+	 * // es2017 example, though `asyncify` is not needed if your JS environment
+	 * // supports async functions out of the box
+	 * var q = async.queue(async.asyncify(async function(file) {
+	 *     var intermediateStep = await processFile(file);
+	 *     return await somePromise(intermediateStep)
+	 * }));
+	 *
+	 * q.push(files);
+	 */
+	function asyncify(func) {
+	    return initialParams(function (args, callback) {
+	        var result;
+	        try {
+	            result = func.apply(this, args);
+	        } catch (e) {
+	            return callback(e);
+	        }
+	        // if result is Promise object
+	        if (isObject(result) && typeof result.then === 'function') {
+	            result.then(function(value) {
+	                invokeCallback(callback, null, value);
+	            }, function(err) {
+	                invokeCallback(callback, err.message ? err : new Error(err));
+	            });
+	        } else {
+	            callback(null, result);
+	        }
+	    });
+	}
+
+	function invokeCallback(callback, error, value) {
+	    try {
+	        callback(error, value);
+	    } catch (e) {
+	        setImmediate$1(rethrow, e);
+	    }
+	}
+
+	function rethrow(error) {
+	    throw error;
+	}
+
+	var supportsSymbol = typeof Symbol === 'function';
+
+	function isAsync(fn) {
+	    return supportsSymbol && fn[Symbol.toStringTag] === 'AsyncFunction';
+	}
+
+	function wrapAsync(asyncFn) {
+	    return isAsync(asyncFn) ? asyncify(asyncFn) : asyncFn;
+	}
+
+	function applyEach$1(eachfn) {
+	    return function(fns/*, ...args*/) {
+	        var args = slice(arguments, 1);
+	        var go = initialParams(function(args, callback) {
+	            var that = this;
+	            return eachfn(fns, function (fn, cb) {
+	                wrapAsync(fn).apply(that, args.concat(cb));
+	            }, callback);
+	        });
+	        if (args.length) {
+	            return go.apply(this, args);
+	        }
+	        else {
+	            return go;
+	        }
+	    };
+	}
+
+	/** Detect free variable `global` from Node.js. */
+	var freeGlobal = typeof global == 'object' && global && global.Object === Object && global;
+
+	/** Detect free variable `self`. */
+	var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
+
+	/** Used as a reference to the global object. */
+	var root = freeGlobal || freeSelf || Function('return this')();
+
+	/** Built-in value references. */
+	var Symbol$1 = root.Symbol;
+
+	/** Used for built-in method references. */
+	var objectProto = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty = objectProto.hasOwnProperty;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var nativeObjectToString = objectProto.toString;
+
+	/** Built-in value references. */
+	var symToStringTag$1 = Symbol$1 ? Symbol$1.toStringTag : undefined;
+
+	/**
+	 * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the raw `toStringTag`.
+	 */
+	function getRawTag(value) {
+	  var isOwn = hasOwnProperty.call(value, symToStringTag$1),
+	      tag = value[symToStringTag$1];
+
+	  try {
+	    value[symToStringTag$1] = undefined;
+	    var unmasked = true;
+	  } catch (e) {}
+
+	  var result = nativeObjectToString.call(value);
+	  if (unmasked) {
+	    if (isOwn) {
+	      value[symToStringTag$1] = tag;
+	    } else {
+	      delete value[symToStringTag$1];
+	    }
+	  }
+	  return result;
+	}
+
+	/** Used for built-in method references. */
+	var objectProto$1 = Object.prototype;
+
+	/**
+	 * Used to resolve the
+	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+	 * of values.
+	 */
+	var nativeObjectToString$1 = objectProto$1.toString;
+
+	/**
+	 * Converts `value` to a string using `Object.prototype.toString`.
+	 *
+	 * @private
+	 * @param {*} value The value to convert.
+	 * @returns {string} Returns the converted string.
+	 */
+	function objectToString(value) {
+	  return nativeObjectToString$1.call(value);
+	}
+
+	/** `Object#toString` result references. */
+	var nullTag = '[object Null]';
+	var undefinedTag = '[object Undefined]';
+
+	/** Built-in value references. */
+	var symToStringTag = Symbol$1 ? Symbol$1.toStringTag : undefined;
+
+	/**
+	 * The base implementation of `getTag` without fallbacks for buggy environments.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @returns {string} Returns the `toStringTag`.
+	 */
+	function baseGetTag(value) {
+	  if (value == null) {
+	    return value === undefined ? undefinedTag : nullTag;
+	  }
+	  value = Object(value);
+	  return (symToStringTag && symToStringTag in value)
+	    ? getRawTag(value)
+	    : objectToString(value);
+	}
+
+	/** `Object#toString` result references. */
+	var asyncTag = '[object AsyncFunction]';
+	var funcTag = '[object Function]';
+	var genTag = '[object GeneratorFunction]';
+	var proxyTag = '[object Proxy]';
+
+	/**
+	 * Checks if `value` is classified as a `Function` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
+	 * @example
+	 *
+	 * _.isFunction(_);
+	 * // => true
+	 *
+	 * _.isFunction(/abc/);
+	 * // => false
+	 */
+	function isFunction(value) {
+	  if (!isObject(value)) {
+	    return false;
+	  }
+	  // The use of `Object#toString` avoids issues with the `typeof` operator
+	  // in Safari 9 which returns 'object' for typed arrays and other constructors.
+	  var tag = baseGetTag(value);
+	  return tag == funcTag || tag == genTag || tag == asyncTag || tag == proxyTag;
+	}
+
+	/** Used as references for various `Number` constants. */
+	var MAX_SAFE_INTEGER = 9007199254740991;
+
+	/**
+	 * Checks if `value` is a valid array-like length.
+	 *
+	 * **Note:** This method is loosely based on
+	 * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
+	 * @example
+	 *
+	 * _.isLength(3);
+	 * // => true
+	 *
+	 * _.isLength(Number.MIN_VALUE);
+	 * // => false
+	 *
+	 * _.isLength(Infinity);
+	 * // => false
+	 *
+	 * _.isLength('3');
+	 * // => false
+	 */
+	function isLength(value) {
+	  return typeof value == 'number' &&
+	    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
+	}
+
+	/**
+	 * Checks if `value` is array-like. A value is considered array-like if it's
+	 * not a function and has a `value.length` that's an integer greater than or
+	 * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
+	 * @example
+	 *
+	 * _.isArrayLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArrayLike(document.body.children);
+	 * // => true
+	 *
+	 * _.isArrayLike('abc');
+	 * // => true
+	 *
+	 * _.isArrayLike(_.noop);
+	 * // => false
+	 */
+	function isArrayLike(value) {
+	  return value != null && isLength(value.length) && !isFunction(value);
+	}
+
+	// A temporary value used to identify if the loop should be broken.
+	// See #1064, #1293
+	var breakLoop = {};
+
+	/**
+	 * This method returns `undefined`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 2.3.0
+	 * @category Util
+	 * @example
+	 *
+	 * _.times(2, _.noop);
+	 * // => [undefined, undefined]
+	 */
+	function noop() {
+	  // No operation performed.
+	}
+
+	function once(fn) {
+	    return function () {
+	        if (fn === null) return;
+	        var callFn = fn;
+	        fn = null;
+	        callFn.apply(this, arguments);
+	    };
+	}
+
+	var iteratorSymbol = typeof Symbol === 'function' && Symbol.iterator;
+
+	var getIterator = function (coll) {
+	    return iteratorSymbol && coll[iteratorSymbol] && coll[iteratorSymbol]();
+	};
+
+	/**
+	 * The base implementation of `_.times` without support for iteratee shorthands
+	 * or max array length checks.
+	 *
+	 * @private
+	 * @param {number} n The number of times to invoke `iteratee`.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the array of results.
+	 */
+	function baseTimes(n, iteratee) {
+	  var index = -1,
+	      result = Array(n);
+
+	  while (++index < n) {
+	    result[index] = iteratee(index);
+	  }
+	  return result;
+	}
+
+	/**
+	 * Checks if `value` is object-like. A value is object-like if it's not `null`
+	 * and has a `typeof` result of "object".
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+	 * @example
+	 *
+	 * _.isObjectLike({});
+	 * // => true
+	 *
+	 * _.isObjectLike([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isObjectLike(_.noop);
+	 * // => false
+	 *
+	 * _.isObjectLike(null);
+	 * // => false
+	 */
+	function isObjectLike(value) {
+	  return value != null && typeof value == 'object';
+	}
+
+	/** `Object#toString` result references. */
+	var argsTag = '[object Arguments]';
+
+	/**
+	 * The base implementation of `_.isArguments`.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+	 */
+	function baseIsArguments(value) {
+	  return isObjectLike(value) && baseGetTag(value) == argsTag;
+	}
+
+	/** Used for built-in method references. */
+	var objectProto$3 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$2 = objectProto$3.hasOwnProperty;
+
+	/** Built-in value references. */
+	var propertyIsEnumerable = objectProto$3.propertyIsEnumerable;
+
+	/**
+	 * Checks if `value` is likely an `arguments` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an `arguments` object,
+	 *  else `false`.
+	 * @example
+	 *
+	 * _.isArguments(function() { return arguments; }());
+	 * // => true
+	 *
+	 * _.isArguments([1, 2, 3]);
+	 * // => false
+	 */
+	var isArguments = baseIsArguments(function() { return arguments; }()) ? baseIsArguments : function(value) {
+	  return isObjectLike(value) && hasOwnProperty$2.call(value, 'callee') &&
+	    !propertyIsEnumerable.call(value, 'callee');
+	};
+
+	/**
+	 * Checks if `value` is classified as an `Array` object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 0.1.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is an array, else `false`.
+	 * @example
+	 *
+	 * _.isArray([1, 2, 3]);
+	 * // => true
+	 *
+	 * _.isArray(document.body.children);
+	 * // => false
+	 *
+	 * _.isArray('abc');
+	 * // => false
+	 *
+	 * _.isArray(_.noop);
+	 * // => false
+	 */
+	var isArray = Array.isArray;
+
+	/**
+	 * This method returns `false`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.13.0
+	 * @category Util
+	 * @returns {boolean} Returns `false`.
+	 * @example
+	 *
+	 * _.times(2, _.stubFalse);
+	 * // => [false, false]
+	 */
+	function stubFalse() {
+	  return false;
+	}
+
+	/** Detect free variable `exports`. */
+	var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule = freeExports && typeof module == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports = freeModule && freeModule.exports === freeExports;
+
+	/** Built-in value references. */
+	var Buffer = moduleExports ? root.Buffer : undefined;
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeIsBuffer = Buffer ? Buffer.isBuffer : undefined;
+
+	/**
+	 * Checks if `value` is a buffer.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.3.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a buffer, else `false`.
+	 * @example
+	 *
+	 * _.isBuffer(new Buffer(2));
+	 * // => true
+	 *
+	 * _.isBuffer(new Uint8Array(2));
+	 * // => false
+	 */
+	var isBuffer = nativeIsBuffer || stubFalse;
+
+	/** Used as references for various `Number` constants. */
+	var MAX_SAFE_INTEGER$1 = 9007199254740991;
+
+	/** Used to detect unsigned integer values. */
+	var reIsUint = /^(?:0|[1-9]\d*)$/;
+
+	/**
+	 * Checks if `value` is a valid array-like index.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
+	 * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
+	 */
+	function isIndex(value, length) {
+	  length = length == null ? MAX_SAFE_INTEGER$1 : length;
+	  return !!length &&
+	    (typeof value == 'number' || reIsUint.test(value)) &&
+	    (value > -1 && value % 1 == 0 && value < length);
+	}
+
+	/** `Object#toString` result references. */
+	var argsTag$1 = '[object Arguments]';
+	var arrayTag = '[object Array]';
+	var boolTag = '[object Boolean]';
+	var dateTag = '[object Date]';
+	var errorTag = '[object Error]';
+	var funcTag$1 = '[object Function]';
+	var mapTag = '[object Map]';
+	var numberTag = '[object Number]';
+	var objectTag = '[object Object]';
+	var regexpTag = '[object RegExp]';
+	var setTag = '[object Set]';
+	var stringTag = '[object String]';
+	var weakMapTag = '[object WeakMap]';
+
+	var arrayBufferTag = '[object ArrayBuffer]';
+	var dataViewTag = '[object DataView]';
+	var float32Tag = '[object Float32Array]';
+	var float64Tag = '[object Float64Array]';
+	var int8Tag = '[object Int8Array]';
+	var int16Tag = '[object Int16Array]';
+	var int32Tag = '[object Int32Array]';
+	var uint8Tag = '[object Uint8Array]';
+	var uint8ClampedTag = '[object Uint8ClampedArray]';
+	var uint16Tag = '[object Uint16Array]';
+	var uint32Tag = '[object Uint32Array]';
+
+	/** Used to identify `toStringTag` values of typed arrays. */
+	var typedArrayTags = {};
+	typedArrayTags[float32Tag] = typedArrayTags[float64Tag] =
+	typedArrayTags[int8Tag] = typedArrayTags[int16Tag] =
+	typedArrayTags[int32Tag] = typedArrayTags[uint8Tag] =
+	typedArrayTags[uint8ClampedTag] = typedArrayTags[uint16Tag] =
+	typedArrayTags[uint32Tag] = true;
+	typedArrayTags[argsTag$1] = typedArrayTags[arrayTag] =
+	typedArrayTags[arrayBufferTag] = typedArrayTags[boolTag] =
+	typedArrayTags[dataViewTag] = typedArrayTags[dateTag] =
+	typedArrayTags[errorTag] = typedArrayTags[funcTag$1] =
+	typedArrayTags[mapTag] = typedArrayTags[numberTag] =
+	typedArrayTags[objectTag] = typedArrayTags[regexpTag] =
+	typedArrayTags[setTag] = typedArrayTags[stringTag] =
+	typedArrayTags[weakMapTag] = false;
+
+	/**
+	 * The base implementation of `_.isTypedArray` without Node.js optimizations.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+	 */
+	function baseIsTypedArray(value) {
+	  return isObjectLike(value) &&
+	    isLength(value.length) && !!typedArrayTags[baseGetTag(value)];
+	}
+
+	/**
+	 * The base implementation of `_.unary` without support for storing metadata.
+	 *
+	 * @private
+	 * @param {Function} func The function to cap arguments for.
+	 * @returns {Function} Returns the new capped function.
+	 */
+	function baseUnary(func) {
+	  return function(value) {
+	    return func(value);
+	  };
+	}
+
+	/** Detect free variable `exports`. */
+	var freeExports$1 = typeof exports == 'object' && exports && !exports.nodeType && exports;
+
+	/** Detect free variable `module`. */
+	var freeModule$1 = freeExports$1 && typeof module == 'object' && module && !module.nodeType && module;
+
+	/** Detect the popular CommonJS extension `module.exports`. */
+	var moduleExports$1 = freeModule$1 && freeModule$1.exports === freeExports$1;
+
+	/** Detect free variable `process` from Node.js. */
+	var freeProcess = moduleExports$1 && freeGlobal.process;
+
+	/** Used to access faster Node.js helpers. */
+	var nodeUtil = (function() {
+	  try {
+	    return freeProcess && freeProcess.binding('util');
+	  } catch (e) {}
+	}());
+
+	/* Node.js helper references. */
+	var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
+
+	/**
+	 * Checks if `value` is classified as a typed array.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a typed array, else `false`.
+	 * @example
+	 *
+	 * _.isTypedArray(new Uint8Array);
+	 * // => true
+	 *
+	 * _.isTypedArray([]);
+	 * // => false
+	 */
+	var isTypedArray = nodeIsTypedArray ? baseUnary(nodeIsTypedArray) : baseIsTypedArray;
+
+	/** Used for built-in method references. */
+	var objectProto$2 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$1 = objectProto$2.hasOwnProperty;
+
+	/**
+	 * Creates an array of the enumerable property names of the array-like `value`.
+	 *
+	 * @private
+	 * @param {*} value The value to query.
+	 * @param {boolean} inherited Specify returning inherited property names.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function arrayLikeKeys(value, inherited) {
+	  var isArr = isArray(value),
+	      isArg = !isArr && isArguments(value),
+	      isBuff = !isArr && !isArg && isBuffer(value),
+	      isType = !isArr && !isArg && !isBuff && isTypedArray(value),
+	      skipIndexes = isArr || isArg || isBuff || isType,
+	      result = skipIndexes ? baseTimes(value.length, String) : [],
+	      length = result.length;
+
+	  for (var key in value) {
+	    if ((inherited || hasOwnProperty$1.call(value, key)) &&
+	        !(skipIndexes && (
+	           // Safari 9 has enumerable `arguments.length` in strict mode.
+	           key == 'length' ||
+	           // Node.js 0.10 has enumerable non-index properties on buffers.
+	           (isBuff && (key == 'offset' || key == 'parent')) ||
+	           // PhantomJS 2 has enumerable non-index properties on typed arrays.
+	           (isType && (key == 'buffer' || key == 'byteLength' || key == 'byteOffset')) ||
+	           // Skip index properties.
+	           isIndex(key, length)
+	        ))) {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	/** Used for built-in method references. */
+	var objectProto$5 = Object.prototype;
+
+	/**
+	 * Checks if `value` is likely a prototype object.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a prototype, else `false`.
+	 */
+	function isPrototype(value) {
+	  var Ctor = value && value.constructor,
+	      proto = (typeof Ctor == 'function' && Ctor.prototype) || objectProto$5;
+
+	  return value === proto;
+	}
+
+	/**
+	 * Creates a unary function that invokes `func` with its argument transformed.
+	 *
+	 * @private
+	 * @param {Function} func The function to wrap.
+	 * @param {Function} transform The argument transform.
+	 * @returns {Function} Returns the new function.
+	 */
+	function overArg(func, transform) {
+	  return function(arg) {
+	    return func(transform(arg));
+	  };
+	}
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeKeys = overArg(Object.keys, Object);
+
+	/** Used for built-in method references. */
+	var objectProto$4 = Object.prototype;
+
+	/** Used to check objects for own properties. */
+	var hasOwnProperty$3 = objectProto$4.hasOwnProperty;
+
+	/**
+	 * The base implementation of `_.keys` which doesn't treat sparse arrays as dense.
+	 *
+	 * @private
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 */
+	function baseKeys(object) {
+	  if (!isPrototype(object)) {
+	    return nativeKeys(object);
+	  }
+	  var result = [];
+	  for (var key in Object(object)) {
+	    if (hasOwnProperty$3.call(object, key) && key != 'constructor') {
+	      result.push(key);
+	    }
+	  }
+	  return result;
+	}
+
+	/**
+	 * Creates an array of the own enumerable property names of `object`.
+	 *
+	 * **Note:** Non-object values are coerced to objects. See the
+	 * [ES spec](http://ecma-international.org/ecma-262/7.0/#sec-object.keys)
+	 * for more details.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Object
+	 * @param {Object} object The object to query.
+	 * @returns {Array} Returns the array of property names.
+	 * @example
+	 *
+	 * function Foo() {
+	 *   this.a = 1;
+	 *   this.b = 2;
+	 * }
+	 *
+	 * Foo.prototype.c = 3;
+	 *
+	 * _.keys(new Foo);
+	 * // => ['a', 'b'] (iteration order is not guaranteed)
+	 *
+	 * _.keys('hi');
+	 * // => ['0', '1']
+	 */
+	function keys(object) {
+	  return isArrayLike(object) ? arrayLikeKeys(object) : baseKeys(object);
+	}
+
+	function createArrayIterator(coll) {
+	    var i = -1;
+	    var len = coll.length;
+	    return function next() {
+	        return ++i < len ? {value: coll[i], key: i} : null;
+	    }
+	}
+
+	function createES2015Iterator(iterator) {
+	    var i = -1;
+	    return function next() {
+	        var item = iterator.next();
+	        if (item.done)
+	            return null;
+	        i++;
+	        return {value: item.value, key: i};
+	    }
+	}
+
+	function createObjectIterator(obj) {
+	    var okeys = keys(obj);
+	    var i = -1;
+	    var len = okeys.length;
+	    return function next() {
+	        var key = okeys[++i];
+	        return i < len ? {value: obj[key], key: key} : null;
+	    };
+	}
+
+	function iterator(coll) {
+	    if (isArrayLike(coll)) {
+	        return createArrayIterator(coll);
+	    }
+
+	    var iterator = getIterator(coll);
+	    return iterator ? createES2015Iterator(iterator) : createObjectIterator(coll);
+	}
+
+	function onlyOnce(fn) {
+	    return function() {
+	        if (fn === null) throw new Error("Callback was already called.");
+	        var callFn = fn;
+	        fn = null;
+	        callFn.apply(this, arguments);
+	    };
+	}
+
+	function _eachOfLimit(limit) {
+	    return function (obj, iteratee, callback) {
+	        callback = once(callback || noop);
+	        if (limit <= 0 || !obj) {
+	            return callback(null);
+	        }
+	        var nextElem = iterator(obj);
+	        var done = false;
+	        var running = 0;
+
+	        function iterateeCallback(err, value) {
+	            running -= 1;
+	            if (err) {
+	                done = true;
+	                callback(err);
+	            }
+	            else if (value === breakLoop || (done && running <= 0)) {
+	                done = true;
+	                return callback(null);
+	            }
+	            else {
+	                replenish();
+	            }
+	        }
+
+	        function replenish () {
+	            while (running < limit && !done) {
+	                var elem = nextElem();
+	                if (elem === null) {
+	                    done = true;
+	                    if (running <= 0) {
+	                        callback(null);
+	                    }
+	                    return;
+	                }
+	                running += 1;
+	                iteratee(elem.value, elem.key, onlyOnce(iterateeCallback));
+	            }
+	        }
+
+	        replenish();
+	    };
+	}
+
+	/**
+	 * The same as [`eachOf`]{@link module:Collections.eachOf} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name eachOfLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.eachOf]{@link module:Collections.eachOf}
+	 * @alias forEachOfLimit
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each
+	 * item in `coll`. The `key` is the item's key, or index in the case of an
+	 * array.
+	 * Invoked with (item, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all
+	 * `iteratee` functions have finished, or an error occurs. Invoked with (err).
+	 */
+	function eachOfLimit(coll, limit, iteratee, callback) {
+	    _eachOfLimit(limit)(coll, wrapAsync(iteratee), callback);
+	}
+
+	function doLimit(fn, limit) {
+	    return function (iterable, iteratee, callback) {
+	        return fn(iterable, limit, iteratee, callback);
+	    };
+	}
+
+	// eachOf implementation optimized for array-likes
+	function eachOfArrayLike(coll, iteratee, callback) {
+	    callback = once(callback || noop);
+	    var index = 0,
+	        completed = 0,
+	        length = coll.length;
+	    if (length === 0) {
+	        callback(null);
+	    }
+
+	    function iteratorCallback(err, value) {
+	        if (err) {
+	            callback(err);
+	        } else if ((++completed === length) || value === breakLoop) {
+	            callback(null);
+	        }
+	    }
+
+	    for (; index < length; index++) {
+	        iteratee(coll[index], index, onlyOnce(iteratorCallback));
+	    }
+	}
+
+	// a generic version of eachOf which can handle array, object, and iterator cases.
+	var eachOfGeneric = doLimit(eachOfLimit, Infinity);
+
+	/**
+	 * Like [`each`]{@link module:Collections.each}, except that it passes the key (or index) as the second argument
+	 * to the iteratee.
+	 *
+	 * @name eachOf
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias forEachOf
+	 * @category Collection
+	 * @see [async.each]{@link module:Collections.each}
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A function to apply to each
+	 * item in `coll`.
+	 * The `key` is the item's key, or index in the case of an array.
+	 * Invoked with (item, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all
+	 * `iteratee` functions have finished, or an error occurs. Invoked with (err).
+	 * @example
+	 *
+	 * var obj = {dev: "/dev.json", test: "/test.json", prod: "/prod.json"};
+	 * var configs = {};
+	 *
+	 * async.forEachOf(obj, function (value, key, callback) {
+	 *     fs.readFile(__dirname + value, "utf8", function (err, data) {
+	 *         if (err) return callback(err);
+	 *         try {
+	 *             configs[key] = JSON.parse(data);
+	 *         } catch (e) {
+	 *             return callback(e);
+	 *         }
+	 *         callback();
+	 *     });
+	 * }, function (err) {
+	 *     if (err) console.error(err.message);
+	 *     // configs is now a map of JSON data
+	 *     doSomethingWith(configs);
+	 * });
+	 */
+	var eachOf = function(coll, iteratee, callback) {
+	    var eachOfImplementation = isArrayLike(coll) ? eachOfArrayLike : eachOfGeneric;
+	    eachOfImplementation(coll, wrapAsync(iteratee), callback);
+	};
+
+	function doParallel(fn) {
+	    return function (obj, iteratee, callback) {
+	        return fn(eachOf, obj, wrapAsync(iteratee), callback);
+	    };
+	}
+
+	function _asyncMap(eachfn, arr, iteratee, callback) {
+	    callback = callback || noop;
+	    arr = arr || [];
+	    var results = [];
+	    var counter = 0;
+	    var _iteratee = wrapAsync(iteratee);
+
+	    eachfn(arr, function (value, _, callback) {
+	        var index = counter++;
+	        _iteratee(value, function (err, v) {
+	            results[index] = v;
+	            callback(err);
+	        });
+	    }, function (err) {
+	        callback(err, results);
+	    });
+	}
+
+	/**
+	 * Produces a new collection of values by mapping each value in `coll` through
+	 * the `iteratee` function. The `iteratee` is called with an item from `coll`
+	 * and a callback for when it has finished processing. Each of these callback
+	 * takes 2 arguments: an `error`, and the transformed item from `coll`. If
+	 * `iteratee` passes an error to its callback, the main `callback` (for the
+	 * `map` function) is immediately called with the error.
+	 *
+	 * Note, that since this function applies the `iteratee` to each item in
+	 * parallel, there is no guarantee that the `iteratee` functions will complete
+	 * in order. However, the results array will be in the same order as the
+	 * original `coll`.
+	 *
+	 * If `map` is passed an Object, the results will be an Array.  The results
+	 * will roughly be in the order of the original Objects' keys (but this can
+	 * vary across JavaScript engines).
+	 *
+	 * @name map
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with the transformed item.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Results is an Array of the
+	 * transformed items from the `coll`. Invoked with (err, results).
+	 * @example
+	 *
+	 * async.map(['file1','file2','file3'], fs.stat, function(err, results) {
+	 *     // results is now an array of stats for each file
+	 * });
+	 */
+	var map = doParallel(_asyncMap);
+
+	/**
+	 * Applies the provided arguments to each function in the array, calling
+	 * `callback` after all functions have completed. If you only provide the first
+	 * argument, `fns`, then it will return a function which lets you pass in the
+	 * arguments as if it were a single function call. If more arguments are
+	 * provided, `callback` is required while `args` is still optional.
+	 *
+	 * @name applyEach
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} fns - A collection of {@link AsyncFunction}s
+	 * to all call with the same arguments
+	 * @param {...*} [args] - any number of separate arguments to pass to the
+	 * function.
+	 * @param {Function} [callback] - the final argument should be the callback,
+	 * called when all functions have completed processing.
+	 * @returns {Function} - If only the first argument, `fns`, is provided, it will
+	 * return a function which lets you pass in the arguments as if it were a single
+	 * function call. The signature is `(..args, callback)`. If invoked with any
+	 * arguments, `callback` is required.
+	 * @example
+	 *
+	 * async.applyEach([enableSearch, updateSchema], 'bucket', callback);
+	 *
+	 * // partial application example:
+	 * async.each(
+	 *     buckets,
+	 *     async.applyEach([enableSearch, updateSchema]),
+	 *     callback
+	 * );
+	 */
+	var applyEach = applyEach$1(map);
+
+	function doParallelLimit(fn) {
+	    return function (obj, limit, iteratee, callback) {
+	        return fn(_eachOfLimit(limit), obj, wrapAsync(iteratee), callback);
+	    };
+	}
+
+	/**
+	 * The same as [`map`]{@link module:Collections.map} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name mapLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.map]{@link module:Collections.map}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with the transformed item.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Results is an array of the
+	 * transformed items from the `coll`. Invoked with (err, results).
+	 */
+	var mapLimit = doParallelLimit(_asyncMap);
+
+	/**
+	 * The same as [`map`]{@link module:Collections.map} but runs only a single async operation at a time.
+	 *
+	 * @name mapSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.map]{@link module:Collections.map}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with the transformed item.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Results is an array of the
+	 * transformed items from the `coll`. Invoked with (err, results).
+	 */
+	var mapSeries = doLimit(mapLimit, 1);
+
+	/**
+	 * The same as [`applyEach`]{@link module:ControlFlow.applyEach} but runs only a single async operation at a time.
+	 *
+	 * @name applyEachSeries
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.applyEach]{@link module:ControlFlow.applyEach}
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} fns - A collection of {@link AsyncFunction}s to all
+	 * call with the same arguments
+	 * @param {...*} [args] - any number of separate arguments to pass to the
+	 * function.
+	 * @param {Function} [callback] - the final argument should be the callback,
+	 * called when all functions have completed processing.
+	 * @returns {Function} - If only the first argument is provided, it will return
+	 * a function which lets you pass in the arguments as if it were a single
+	 * function call.
+	 */
+	var applyEachSeries = applyEach$1(mapSeries);
+
+	/**
+	 * Creates a continuation function with some arguments already applied.
+	 *
+	 * Useful as a shorthand when combined with other control flow functions. Any
+	 * arguments passed to the returned function are added to the arguments
+	 * originally passed to apply.
+	 *
+	 * @name apply
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {Function} fn - The function you want to eventually apply all
+	 * arguments to. Invokes with (arguments...).
+	 * @param {...*} arguments... - Any number of arguments to automatically apply
+	 * when the continuation is called.
+	 * @returns {Function} the partially-applied function
+	 * @example
+	 *
+	 * // using apply
+	 * async.parallel([
+	 *     async.apply(fs.writeFile, 'testfile1', 'test1'),
+	 *     async.apply(fs.writeFile, 'testfile2', 'test2')
+	 * ]);
+	 *
+	 *
+	 * // the same process without using apply
+	 * async.parallel([
+	 *     function(callback) {
+	 *         fs.writeFile('testfile1', 'test1', callback);
+	 *     },
+	 *     function(callback) {
+	 *         fs.writeFile('testfile2', 'test2', callback);
+	 *     }
+	 * ]);
+	 *
+	 * // It's possible to pass any number of additional arguments when calling the
+	 * // continuation:
+	 *
+	 * node> var fn = async.apply(sys.puts, 'one');
+	 * node> fn('two', 'three');
+	 * one
+	 * two
+	 * three
+	 */
+	var apply = function(fn/*, ...args*/) {
+	    var args = slice(arguments, 1);
+	    return function(/*callArgs*/) {
+	        var callArgs = slice(arguments);
+	        return fn.apply(null, args.concat(callArgs));
+	    };
+	};
+
+	/**
+	 * A specialized version of `_.forEach` for arrays without support for
+	 * iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns `array`.
+	 */
+	function arrayEach(array, iteratee) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length;
+
+	  while (++index < length) {
+	    if (iteratee(array[index], index, array) === false) {
+	      break;
+	    }
+	  }
+	  return array;
+	}
+
+	/**
+	 * Creates a base function for methods like `_.forIn` and `_.forOwn`.
+	 *
+	 * @private
+	 * @param {boolean} [fromRight] Specify iterating from right to left.
+	 * @returns {Function} Returns the new base function.
+	 */
+	function createBaseFor(fromRight) {
+	  return function(object, iteratee, keysFunc) {
+	    var index = -1,
+	        iterable = Object(object),
+	        props = keysFunc(object),
+	        length = props.length;
+
+	    while (length--) {
+	      var key = props[fromRight ? length : ++index];
+	      if (iteratee(iterable[key], key, iterable) === false) {
+	        break;
+	      }
+	    }
+	    return object;
+	  };
+	}
+
+	/**
+	 * The base implementation of `baseForOwn` which iterates over `object`
+	 * properties returned by `keysFunc` and invokes `iteratee` for each property.
+	 * Iteratee functions may exit iteration early by explicitly returning `false`.
+	 *
+	 * @private
+	 * @param {Object} object The object to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @param {Function} keysFunc The function to get the keys of `object`.
+	 * @returns {Object} Returns `object`.
+	 */
+	var baseFor = createBaseFor();
+
+	/**
+	 * The base implementation of `_.forOwn` without support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Object} object The object to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Object} Returns `object`.
+	 */
+	function baseForOwn(object, iteratee) {
+	  return object && baseFor(object, iteratee, keys);
+	}
+
+	/**
+	 * The base implementation of `_.findIndex` and `_.findLastIndex` without
+	 * support for iteratee shorthands.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {Function} predicate The function invoked per iteration.
+	 * @param {number} fromIndex The index to search from.
+	 * @param {boolean} [fromRight] Specify iterating from right to left.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function baseFindIndex(array, predicate, fromIndex, fromRight) {
+	  var length = array.length,
+	      index = fromIndex + (fromRight ? 1 : -1);
+
+	  while ((fromRight ? index-- : ++index < length)) {
+	    if (predicate(array[index], index, array)) {
+	      return index;
+	    }
+	  }
+	  return -1;
+	}
+
+	/**
+	 * The base implementation of `_.isNaN` without support for number objects.
+	 *
+	 * @private
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is `NaN`, else `false`.
+	 */
+	function baseIsNaN(value) {
+	  return value !== value;
+	}
+
+	/**
+	 * A specialized version of `_.indexOf` which performs strict equality
+	 * comparisons of values, i.e. `===`.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} value The value to search for.
+	 * @param {number} fromIndex The index to search from.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function strictIndexOf(array, value, fromIndex) {
+	  var index = fromIndex - 1,
+	      length = array.length;
+
+	  while (++index < length) {
+	    if (array[index] === value) {
+	      return index;
+	    }
+	  }
+	  return -1;
+	}
+
+	/**
+	 * The base implementation of `_.indexOf` without `fromIndex` bounds checks.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {*} value The value to search for.
+	 * @param {number} fromIndex The index to search from.
+	 * @returns {number} Returns the index of the matched value, else `-1`.
+	 */
+	function baseIndexOf(array, value, fromIndex) {
+	  return value === value
+	    ? strictIndexOf(array, value, fromIndex)
+	    : baseFindIndex(array, baseIsNaN, fromIndex);
+	}
+
+	/**
+	 * Determines the best order for running the {@link AsyncFunction}s in `tasks`, based on
+	 * their requirements. Each function can optionally depend on other functions
+	 * being completed first, and each function is run as soon as its requirements
+	 * are satisfied.
+	 *
+	 * If any of the {@link AsyncFunction}s pass an error to their callback, the `auto` sequence
+	 * will stop. Further tasks will not execute (so any other functions depending
+	 * on it will not run), and the main `callback` is immediately called with the
+	 * error.
+	 *
+	 * {@link AsyncFunction}s also receive an object containing the results of functions which
+	 * have completed so far as the first argument, if they have dependencies. If a
+	 * task function has no dependencies, it will only be passed a callback.
+	 *
+	 * @name auto
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Object} tasks - An object. Each of its properties is either a
+	 * function or an array of requirements, with the {@link AsyncFunction} itself the last item
+	 * in the array. The object's key of a property serves as the name of the task
+	 * defined by that property, i.e. can be used when specifying requirements for
+	 * other tasks. The function receives one or two arguments:
+	 * * a `results` object, containing the results of the previously executed
+	 *   functions, only passed if the task has any dependencies,
+	 * * a `callback(err, result)` function, which must be called when finished,
+	 *   passing an `error` (which can be `null`) and the result of the function's
+	 *   execution.
+	 * @param {number} [concurrency=Infinity] - An optional `integer` for
+	 * determining the maximum number of tasks that can be run in parallel. By
+	 * default, as many as possible.
+	 * @param {Function} [callback] - An optional callback which is called when all
+	 * the tasks have been completed. It receives the `err` argument if any `tasks`
+	 * pass an error to their callback. Results are always returned; however, if an
+	 * error occurs, no further `tasks` will be performed, and the results object
+	 * will only contain partial results. Invoked with (err, results).
+	 * @returns undefined
+	 * @example
+	 *
+	 * async.auto({
+	 *     // this function will just be passed a callback
+	 *     readData: async.apply(fs.readFile, 'data.txt', 'utf-8'),
+	 *     showData: ['readData', function(results, cb) {
+	 *         // results.readData is the file's contents
+	 *         // ...
+	 *     }]
+	 * }, callback);
+	 *
+	 * async.auto({
+	 *     get_data: function(callback) {
+	 *         console.log('in get_data');
+	 *         // async code to get some data
+	 *         callback(null, 'data', 'converted to array');
+	 *     },
+	 *     make_folder: function(callback) {
+	 *         console.log('in make_folder');
+	 *         // async code to create a directory to store a file in
+	 *         // this is run at the same time as getting the data
+	 *         callback(null, 'folder');
+	 *     },
+	 *     write_file: ['get_data', 'make_folder', function(results, callback) {
+	 *         console.log('in write_file', JSON.stringify(results));
+	 *         // once there is some data and the directory exists,
+	 *         // write the data to a file in the directory
+	 *         callback(null, 'filename');
+	 *     }],
+	 *     email_link: ['write_file', function(results, callback) {
+	 *         console.log('in email_link', JSON.stringify(results));
+	 *         // once the file is written let's email a link to it...
+	 *         // results.write_file contains the filename returned by write_file.
+	 *         callback(null, {'file':results.write_file, 'email':'user@example.com'});
+	 *     }]
+	 * }, function(err, results) {
+	 *     console.log('err = ', err);
+	 *     console.log('results = ', results);
+	 * });
+	 */
+	var auto = function (tasks, concurrency, callback) {
+	    if (typeof concurrency === 'function') {
+	        // concurrency is optional, shift the args.
+	        callback = concurrency;
+	        concurrency = null;
+	    }
+	    callback = once(callback || noop);
+	    var keys$$1 = keys(tasks);
+	    var numTasks = keys$$1.length;
+	    if (!numTasks) {
+	        return callback(null);
+	    }
+	    if (!concurrency) {
+	        concurrency = numTasks;
+	    }
+
+	    var results = {};
+	    var runningTasks = 0;
+	    var hasError = false;
+
+	    var listeners = Object.create(null);
+
+	    var readyTasks = [];
+
+	    // for cycle detection:
+	    var readyToCheck = []; // tasks that have been identified as reachable
+	    // without the possibility of returning to an ancestor task
+	    var uncheckedDependencies = {};
+
+	    baseForOwn(tasks, function (task, key) {
+	        if (!isArray(task)) {
+	            // no dependencies
+	            enqueueTask(key, [task]);
+	            readyToCheck.push(key);
+	            return;
+	        }
+
+	        var dependencies = task.slice(0, task.length - 1);
+	        var remainingDependencies = dependencies.length;
+	        if (remainingDependencies === 0) {
+	            enqueueTask(key, task);
+	            readyToCheck.push(key);
+	            return;
+	        }
+	        uncheckedDependencies[key] = remainingDependencies;
+
+	        arrayEach(dependencies, function (dependencyName) {
+	            if (!tasks[dependencyName]) {
+	                throw new Error('async.auto task `' + key +
+	                    '` has a non-existent dependency `' +
+	                    dependencyName + '` in ' +
+	                    dependencies.join(', '));
+	            }
+	            addListener(dependencyName, function () {
+	                remainingDependencies--;
+	                if (remainingDependencies === 0) {
+	                    enqueueTask(key, task);
+	                }
+	            });
+	        });
+	    });
+
+	    checkForDeadlocks();
+	    processQueue();
+
+	    function enqueueTask(key, task) {
+	        readyTasks.push(function () {
+	            runTask(key, task);
+	        });
+	    }
+
+	    function processQueue() {
+	        if (readyTasks.length === 0 && runningTasks === 0) {
+	            return callback(null, results);
+	        }
+	        while(readyTasks.length && runningTasks < concurrency) {
+	            var run = readyTasks.shift();
+	            run();
+	        }
+
+	    }
+
+	    function addListener(taskName, fn) {
+	        var taskListeners = listeners[taskName];
+	        if (!taskListeners) {
+	            taskListeners = listeners[taskName] = [];
+	        }
+
+	        taskListeners.push(fn);
+	    }
+
+	    function taskComplete(taskName) {
+	        var taskListeners = listeners[taskName] || [];
+	        arrayEach(taskListeners, function (fn) {
+	            fn();
+	        });
+	        processQueue();
+	    }
+
+
+	    function runTask(key, task) {
+	        if (hasError) return;
+
+	        var taskCallback = onlyOnce(function(err, result) {
+	            runningTasks--;
+	            if (arguments.length > 2) {
+	                result = slice(arguments, 1);
+	            }
+	            if (err) {
+	                var safeResults = {};
+	                baseForOwn(results, function(val, rkey) {
+	                    safeResults[rkey] = val;
+	                });
+	                safeResults[key] = result;
+	                hasError = true;
+	                listeners = Object.create(null);
+
+	                callback(err, safeResults);
+	            } else {
+	                results[key] = result;
+	                taskComplete(key);
+	            }
+	        });
+
+	        runningTasks++;
+	        var taskFn = wrapAsync(task[task.length - 1]);
+	        if (task.length > 1) {
+	            taskFn(results, taskCallback);
+	        } else {
+	            taskFn(taskCallback);
+	        }
+	    }
+
+	    function checkForDeadlocks() {
+	        // Kahn's algorithm
+	        // https://en.wikipedia.org/wiki/Topological_sorting#Kahn.27s_algorithm
+	        // http://connalle.blogspot.com/2013/10/topological-sortingkahn-algorithm.html
+	        var currentTask;
+	        var counter = 0;
+	        while (readyToCheck.length) {
+	            currentTask = readyToCheck.pop();
+	            counter++;
+	            arrayEach(getDependents(currentTask), function (dependent) {
+	                if (--uncheckedDependencies[dependent] === 0) {
+	                    readyToCheck.push(dependent);
+	                }
+	            });
+	        }
+
+	        if (counter !== numTasks) {
+	            throw new Error(
+	                'async.auto cannot execute tasks due to a recursive dependency'
+	            );
+	        }
+	    }
+
+	    function getDependents(taskName) {
+	        var result = [];
+	        baseForOwn(tasks, function (task, key) {
+	            if (isArray(task) && baseIndexOf(task, taskName, 0) >= 0) {
+	                result.push(key);
+	            }
+	        });
+	        return result;
+	    }
+	};
+
+	/**
+	 * A specialized version of `_.map` for arrays without support for iteratee
+	 * shorthands.
+	 *
+	 * @private
+	 * @param {Array} [array] The array to iterate over.
+	 * @param {Function} iteratee The function invoked per iteration.
+	 * @returns {Array} Returns the new mapped array.
+	 */
+	function arrayMap(array, iteratee) {
+	  var index = -1,
+	      length = array == null ? 0 : array.length,
+	      result = Array(length);
+
+	  while (++index < length) {
+	    result[index] = iteratee(array[index], index, array);
+	  }
+	  return result;
+	}
+
+	/** `Object#toString` result references. */
+	var symbolTag = '[object Symbol]';
+
+	/**
+	 * Checks if `value` is classified as a `Symbol` primitive or object.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to check.
+	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+	 * @example
+	 *
+	 * _.isSymbol(Symbol.iterator);
+	 * // => true
+	 *
+	 * _.isSymbol('abc');
+	 * // => false
+	 */
+	function isSymbol(value) {
+	  return typeof value == 'symbol' ||
+	    (isObjectLike(value) && baseGetTag(value) == symbolTag);
+	}
+
+	/** Used as references for various `Number` constants. */
+	var INFINITY = 1 / 0;
+
+	/** Used to convert symbols to primitives and strings. */
+	var symbolProto = Symbol$1 ? Symbol$1.prototype : undefined;
+	var symbolToString = symbolProto ? symbolProto.toString : undefined;
+
+	/**
+	 * The base implementation of `_.toString` which doesn't convert nullish
+	 * values to empty strings.
+	 *
+	 * @private
+	 * @param {*} value The value to process.
+	 * @returns {string} Returns the string.
+	 */
+	function baseToString(value) {
+	  // Exit early for strings to avoid a performance hit in some environments.
+	  if (typeof value == 'string') {
+	    return value;
+	  }
+	  if (isArray(value)) {
+	    // Recursively convert values (susceptible to call stack limits).
+	    return arrayMap(value, baseToString) + '';
+	  }
+	  if (isSymbol(value)) {
+	    return symbolToString ? symbolToString.call(value) : '';
+	  }
+	  var result = (value + '');
+	  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+	}
+
+	/**
+	 * The base implementation of `_.slice` without an iteratee call guard.
+	 *
+	 * @private
+	 * @param {Array} array The array to slice.
+	 * @param {number} [start=0] The start position.
+	 * @param {number} [end=array.length] The end position.
+	 * @returns {Array} Returns the slice of `array`.
+	 */
+	function baseSlice(array, start, end) {
+	  var index = -1,
+	      length = array.length;
+
+	  if (start < 0) {
+	    start = -start > length ? 0 : (length + start);
+	  }
+	  end = end > length ? length : end;
+	  if (end < 0) {
+	    end += length;
+	  }
+	  length = start > end ? 0 : ((end - start) >>> 0);
+	  start >>>= 0;
+
+	  var result = Array(length);
+	  while (++index < length) {
+	    result[index] = array[index + start];
+	  }
+	  return result;
+	}
+
+	/**
+	 * Casts `array` to a slice if it's needed.
+	 *
+	 * @private
+	 * @param {Array} array The array to inspect.
+	 * @param {number} start The start position.
+	 * @param {number} [end=array.length] The end position.
+	 * @returns {Array} Returns the cast slice.
+	 */
+	function castSlice(array, start, end) {
+	  var length = array.length;
+	  end = end === undefined ? length : end;
+	  return (!start && end >= length) ? array : baseSlice(array, start, end);
+	}
+
+	/**
+	 * Used by `_.trim` and `_.trimEnd` to get the index of the last string symbol
+	 * that is not found in the character symbols.
+	 *
+	 * @private
+	 * @param {Array} strSymbols The string symbols to inspect.
+	 * @param {Array} chrSymbols The character symbols to find.
+	 * @returns {number} Returns the index of the last unmatched string symbol.
+	 */
+	function charsEndIndex(strSymbols, chrSymbols) {
+	  var index = strSymbols.length;
+
+	  while (index-- && baseIndexOf(chrSymbols, strSymbols[index], 0) > -1) {}
+	  return index;
+	}
+
+	/**
+	 * Used by `_.trim` and `_.trimStart` to get the index of the first string symbol
+	 * that is not found in the character symbols.
+	 *
+	 * @private
+	 * @param {Array} strSymbols The string symbols to inspect.
+	 * @param {Array} chrSymbols The character symbols to find.
+	 * @returns {number} Returns the index of the first unmatched string symbol.
+	 */
+	function charsStartIndex(strSymbols, chrSymbols) {
+	  var index = -1,
+	      length = strSymbols.length;
+
+	  while (++index < length && baseIndexOf(chrSymbols, strSymbols[index], 0) > -1) {}
+	  return index;
+	}
+
+	/**
+	 * Converts an ASCII `string` to an array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the converted array.
+	 */
+	function asciiToArray(string) {
+	  return string.split('');
+	}
+
+	/** Used to compose unicode character classes. */
+	var rsAstralRange = '\\ud800-\\udfff';
+	var rsComboMarksRange = '\\u0300-\\u036f\\ufe20-\\ufe23';
+	var rsComboSymbolsRange = '\\u20d0-\\u20f0';
+	var rsVarRange = '\\ufe0e\\ufe0f';
+
+	/** Used to compose unicode capture groups. */
+	var rsZWJ = '\\u200d';
+
+	/** Used to detect strings with [zero-width joiners or code points from the astral planes](http://eev.ee/blog/2015/09/12/dark-corners-of-unicode/). */
+	var reHasUnicode = RegExp('[' + rsZWJ + rsAstralRange  + rsComboMarksRange + rsComboSymbolsRange + rsVarRange + ']');
+
+	/**
+	 * Checks if `string` contains Unicode symbols.
+	 *
+	 * @private
+	 * @param {string} string The string to inspect.
+	 * @returns {boolean} Returns `true` if a symbol is found, else `false`.
+	 */
+	function hasUnicode(string) {
+	  return reHasUnicode.test(string);
+	}
+
+	/** Used to compose unicode character classes. */
+	var rsAstralRange$1 = '\\ud800-\\udfff';
+	var rsComboMarksRange$1 = '\\u0300-\\u036f\\ufe20-\\ufe23';
+	var rsComboSymbolsRange$1 = '\\u20d0-\\u20f0';
+	var rsVarRange$1 = '\\ufe0e\\ufe0f';
+
+	/** Used to compose unicode capture groups. */
+	var rsAstral = '[' + rsAstralRange$1 + ']';
+	var rsCombo = '[' + rsComboMarksRange$1 + rsComboSymbolsRange$1 + ']';
+	var rsFitz = '\\ud83c[\\udffb-\\udfff]';
+	var rsModifier = '(?:' + rsCombo + '|' + rsFitz + ')';
+	var rsNonAstral = '[^' + rsAstralRange$1 + ']';
+	var rsRegional = '(?:\\ud83c[\\udde6-\\uddff]){2}';
+	var rsSurrPair = '[\\ud800-\\udbff][\\udc00-\\udfff]';
+	var rsZWJ$1 = '\\u200d';
+
+	/** Used to compose unicode regexes. */
+	var reOptMod = rsModifier + '?';
+	var rsOptVar = '[' + rsVarRange$1 + ']?';
+	var rsOptJoin = '(?:' + rsZWJ$1 + '(?:' + [rsNonAstral, rsRegional, rsSurrPair].join('|') + ')' + rsOptVar + reOptMod + ')*';
+	var rsSeq = rsOptVar + reOptMod + rsOptJoin;
+	var rsSymbol = '(?:' + [rsNonAstral + rsCombo + '?', rsCombo, rsRegional, rsSurrPair, rsAstral].join('|') + ')';
+
+	/** Used to match [string symbols](https://mathiasbynens.be/notes/javascript-unicode). */
+	var reUnicode = RegExp(rsFitz + '(?=' + rsFitz + ')|' + rsSymbol + rsSeq, 'g');
+
+	/**
+	 * Converts a Unicode `string` to an array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the converted array.
+	 */
+	function unicodeToArray(string) {
+	  return string.match(reUnicode) || [];
+	}
+
+	/**
+	 * Converts `string` to an array.
+	 *
+	 * @private
+	 * @param {string} string The string to convert.
+	 * @returns {Array} Returns the converted array.
+	 */
+	function stringToArray(string) {
+	  return hasUnicode(string)
+	    ? unicodeToArray(string)
+	    : asciiToArray(string);
+	}
+
+	/**
+	 * Converts `value` to a string. An empty string is returned for `null`
+	 * and `undefined` values. The sign of `-0` is preserved.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 4.0.0
+	 * @category Lang
+	 * @param {*} value The value to convert.
+	 * @returns {string} Returns the converted string.
+	 * @example
+	 *
+	 * _.toString(null);
+	 * // => ''
+	 *
+	 * _.toString(-0);
+	 * // => '-0'
+	 *
+	 * _.toString([1, 2, 3]);
+	 * // => '1,2,3'
+	 */
+	function toString(value) {
+	  return value == null ? '' : baseToString(value);
+	}
+
+	/** Used to match leading and trailing whitespace. */
+	var reTrim = /^\s+|\s+$/g;
+
+	/**
+	 * Removes leading and trailing whitespace or specified characters from `string`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 3.0.0
+	 * @category String
+	 * @param {string} [string=''] The string to trim.
+	 * @param {string} [chars=whitespace] The characters to trim.
+	 * @param- {Object} [guard] Enables use as an iteratee for methods like `_.map`.
+	 * @returns {string} Returns the trimmed string.
+	 * @example
+	 *
+	 * _.trim('  abc  ');
+	 * // => 'abc'
+	 *
+	 * _.trim('-_-abc-_-', '_-');
+	 * // => 'abc'
+	 *
+	 * _.map(['  foo  ', '  bar  '], _.trim);
+	 * // => ['foo', 'bar']
+	 */
+	function trim(string, chars, guard) {
+	  string = toString(string);
+	  if (string && (guard || chars === undefined)) {
+	    return string.replace(reTrim, '');
+	  }
+	  if (!string || !(chars = baseToString(chars))) {
+	    return string;
+	  }
+	  var strSymbols = stringToArray(string),
+	      chrSymbols = stringToArray(chars),
+	      start = charsStartIndex(strSymbols, chrSymbols),
+	      end = charsEndIndex(strSymbols, chrSymbols) + 1;
+
+	  return castSlice(strSymbols, start, end).join('');
+	}
+
+	var FN_ARGS = /^(?:async\s+)?(function)?\s*[^\(]*\(\s*([^\)]*)\)/m;
+	var FN_ARG_SPLIT = /,/;
+	var FN_ARG = /(=.+)?(\s*)$/;
+	var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
+
+	function parseParams(func) {
+	    func = func.toString().replace(STRIP_COMMENTS, '');
+	    func = func.match(FN_ARGS)[2].replace(' ', '');
+	    func = func ? func.split(FN_ARG_SPLIT) : [];
+	    func = func.map(function (arg){
+	        return trim(arg.replace(FN_ARG, ''));
+	    });
+	    return func;
+	}
+
+	/**
+	 * A dependency-injected version of the [async.auto]{@link module:ControlFlow.auto} function. Dependent
+	 * tasks are specified as parameters to the function, after the usual callback
+	 * parameter, with the parameter names matching the names of the tasks it
+	 * depends on. This can provide even more readable task graphs which can be
+	 * easier to maintain.
+	 *
+	 * If a final callback is specified, the task results are similarly injected,
+	 * specified as named parameters after the initial error parameter.
+	 *
+	 * The autoInject function is purely syntactic sugar and its semantics are
+	 * otherwise equivalent to [async.auto]{@link module:ControlFlow.auto}.
+	 *
+	 * @name autoInject
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.auto]{@link module:ControlFlow.auto}
+	 * @category Control Flow
+	 * @param {Object} tasks - An object, each of whose properties is an {@link AsyncFunction} of
+	 * the form 'func([dependencies...], callback). The object's key of a property
+	 * serves as the name of the task defined by that property, i.e. can be used
+	 * when specifying requirements for other tasks.
+	 * * The `callback` parameter is a `callback(err, result)` which must be called
+	 *   when finished, passing an `error` (which can be `null`) and the result of
+	 *   the function's execution. The remaining parameters name other tasks on
+	 *   which the task is dependent, and the results from those tasks are the
+	 *   arguments of those parameters.
+	 * @param {Function} [callback] - An optional callback which is called when all
+	 * the tasks have been completed. It receives the `err` argument if any `tasks`
+	 * pass an error to their callback, and a `results` object with any completed
+	 * task results, similar to `auto`.
+	 * @example
+	 *
+	 * //  The example from `auto` can be rewritten as follows:
+	 * async.autoInject({
+	 *     get_data: function(callback) {
+	 *         // async code to get some data
+	 *         callback(null, 'data', 'converted to array');
+	 *     },
+	 *     make_folder: function(callback) {
+	 *         // async code to create a directory to store a file in
+	 *         // this is run at the same time as getting the data
+	 *         callback(null, 'folder');
+	 *     },
+	 *     write_file: function(get_data, make_folder, callback) {
+	 *         // once there is some data and the directory exists,
+	 *         // write the data to a file in the directory
+	 *         callback(null, 'filename');
+	 *     },
+	 *     email_link: function(write_file, callback) {
+	 *         // once the file is written let's email a link to it...
+	 *         // write_file contains the filename returned by write_file.
+	 *         callback(null, {'file':write_file, 'email':'user@example.com'});
+	 *     }
+	 * }, function(err, results) {
+	 *     console.log('err = ', err);
+	 *     console.log('email_link = ', results.email_link);
+	 * });
+	 *
+	 * // If you are using a JS minifier that mangles parameter names, `autoInject`
+	 * // will not work with plain functions, since the parameter names will be
+	 * // collapsed to a single letter identifier.  To work around this, you can
+	 * // explicitly specify the names of the parameters your task function needs
+	 * // in an array, similar to Angular.js dependency injection.
+	 *
+	 * // This still has an advantage over plain `auto`, since the results a task
+	 * // depends on are still spread into arguments.
+	 * async.autoInject({
+	 *     //...
+	 *     write_file: ['get_data', 'make_folder', function(get_data, make_folder, callback) {
+	 *         callback(null, 'filename');
+	 *     }],
+	 *     email_link: ['write_file', function(write_file, callback) {
+	 *         callback(null, {'file':write_file, 'email':'user@example.com'});
+	 *     }]
+	 *     //...
+	 * }, function(err, results) {
+	 *     console.log('err = ', err);
+	 *     console.log('email_link = ', results.email_link);
+	 * });
+	 */
+	function autoInject(tasks, callback) {
+	    var newTasks = {};
+
+	    baseForOwn(tasks, function (taskFn, key) {
+	        var params;
+	        var fnIsAsync = isAsync(taskFn);
+	        var hasNoDeps =
+	            (!fnIsAsync && taskFn.length === 1) ||
+	            (fnIsAsync && taskFn.length === 0);
+
+	        if (isArray(taskFn)) {
+	            params = taskFn.slice(0, -1);
+	            taskFn = taskFn[taskFn.length - 1];
+
+	            newTasks[key] = params.concat(params.length > 0 ? newTask : taskFn);
+	        } else if (hasNoDeps) {
+	            // no dependencies, use the function as-is
+	            newTasks[key] = taskFn;
+	        } else {
+	            params = parseParams(taskFn);
+	            if (taskFn.length === 0 && !fnIsAsync && params.length === 0) {
+	                throw new Error("autoInject task functions require explicit parameters.");
+	            }
+
+	            // remove callback param
+	            if (!fnIsAsync) params.pop();
+
+	            newTasks[key] = params.concat(newTask);
+	        }
+
+	        function newTask(results, taskCb) {
+	            var newArgs = arrayMap(params, function (name) {
+	                return results[name];
+	            });
+	            newArgs.push(taskCb);
+	            wrapAsync(taskFn).apply(null, newArgs);
+	        }
+	    });
+
+	    auto(newTasks, callback);
+	}
+
+	// Simple doubly linked list (https://en.wikipedia.org/wiki/Doubly_linked_list) implementation
+	// used for queues. This implementation assumes that the node provided by the user can be modified
+	// to adjust the next and last properties. We implement only the minimal functionality
+	// for queue support.
+	function DLL() {
+	    this.head = this.tail = null;
+	    this.length = 0;
+	}
+
+	function setInitial(dll, node) {
+	    dll.length = 1;
+	    dll.head = dll.tail = node;
+	}
+
+	DLL.prototype.removeLink = function(node) {
+	    if (node.prev) node.prev.next = node.next;
+	    else this.head = node.next;
+	    if (node.next) node.next.prev = node.prev;
+	    else this.tail = node.prev;
+
+	    node.prev = node.next = null;
+	    this.length -= 1;
+	    return node;
+	};
+
+	DLL.prototype.empty = function () {
+	    while(this.head) this.shift();
+	    return this;
+	};
+
+	DLL.prototype.insertAfter = function(node, newNode) {
+	    newNode.prev = node;
+	    newNode.next = node.next;
+	    if (node.next) node.next.prev = newNode;
+	    else this.tail = newNode;
+	    node.next = newNode;
+	    this.length += 1;
+	};
+
+	DLL.prototype.insertBefore = function(node, newNode) {
+	    newNode.prev = node.prev;
+	    newNode.next = node;
+	    if (node.prev) node.prev.next = newNode;
+	    else this.head = newNode;
+	    node.prev = newNode;
+	    this.length += 1;
+	};
+
+	DLL.prototype.unshift = function(node) {
+	    if (this.head) this.insertBefore(this.head, node);
+	    else setInitial(this, node);
+	};
+
+	DLL.prototype.push = function(node) {
+	    if (this.tail) this.insertAfter(this.tail, node);
+	    else setInitial(this, node);
+	};
+
+	DLL.prototype.shift = function() {
+	    return this.head && this.removeLink(this.head);
+	};
+
+	DLL.prototype.pop = function() {
+	    return this.tail && this.removeLink(this.tail);
+	};
+
+	DLL.prototype.toArray = function () {
+	    var arr = Array(this.length);
+	    var curr = this.head;
+	    for(var idx = 0; idx < this.length; idx++) {
+	        arr[idx] = curr.data;
+	        curr = curr.next;
+	    }
+	    return arr;
+	};
+
+	DLL.prototype.remove = function (testFn) {
+	    var curr = this.head;
+	    while(!!curr) {
+	        var next = curr.next;
+	        if (testFn(curr)) {
+	            this.removeLink(curr);
+	        }
+	        curr = next;
+	    }
+	    return this;
+	};
+
+	function queue(worker, concurrency, payload) {
+	    if (concurrency == null) {
+	        concurrency = 1;
+	    }
+	    else if(concurrency === 0) {
+	        throw new Error('Concurrency must not be zero');
+	    }
+
+	    var _worker = wrapAsync(worker);
+	    var numRunning = 0;
+	    var workersList = [];
+
+	    function _insert(data, insertAtFront, callback) {
+	        if (callback != null && typeof callback !== 'function') {
+	            throw new Error('task callback must be a function');
+	        }
+	        q.started = true;
+	        if (!isArray(data)) {
+	            data = [data];
+	        }
+	        if (data.length === 0 && q.idle()) {
+	            // call drain immediately if there are no tasks
+	            return setImmediate$1(function() {
+	                q.drain();
+	            });
+	        }
+
+	        for (var i = 0, l = data.length; i < l; i++) {
+	            var item = {
+	                data: data[i],
+	                callback: callback || noop
+	            };
+
+	            if (insertAtFront) {
+	                q._tasks.unshift(item);
+	            } else {
+	                q._tasks.push(item);
+	            }
+	        }
+	        setImmediate$1(q.process);
+	    }
+
+	    function _next(tasks) {
+	        return function(err){
+	            numRunning -= 1;
+
+	            for (var i = 0, l = tasks.length; i < l; i++) {
+	                var task = tasks[i];
+
+	                var index = baseIndexOf(workersList, task, 0);
+	                if (index >= 0) {
+	                    workersList.splice(index, 1);
+	                }
+
+	                task.callback.apply(task, arguments);
+
+	                if (err != null) {
+	                    q.error(err, task.data);
+	                }
+	            }
+
+	            if (numRunning <= (q.concurrency - q.buffer) ) {
+	                q.unsaturated();
+	            }
+
+	            if (q.idle()) {
+	                q.drain();
+	            }
+	            q.process();
+	        };
+	    }
+
+	    var isProcessing = false;
+	    var q = {
+	        _tasks: new DLL(),
+	        concurrency: concurrency,
+	        payload: payload,
+	        saturated: noop,
+	        unsaturated:noop,
+	        buffer: concurrency / 4,
+	        empty: noop,
+	        drain: noop,
+	        error: noop,
+	        started: false,
+	        paused: false,
+	        push: function (data, callback) {
+	            _insert(data, false, callback);
+	        },
+	        kill: function () {
+	            q.drain = noop;
+	            q._tasks.empty();
+	        },
+	        unshift: function (data, callback) {
+	            _insert(data, true, callback);
+	        },
+	        remove: function (testFn) {
+	            q._tasks.remove(testFn);
+	        },
+	        process: function () {
+	            // Avoid trying to start too many processing operations. This can occur
+	            // when callbacks resolve synchronously (#1267).
+	            if (isProcessing) {
+	                return;
+	            }
+	            isProcessing = true;
+	            while(!q.paused && numRunning < q.concurrency && q._tasks.length){
+	                var tasks = [], data = [];
+	                var l = q._tasks.length;
+	                if (q.payload) l = Math.min(l, q.payload);
+	                for (var i = 0; i < l; i++) {
+	                    var node = q._tasks.shift();
+	                    tasks.push(node);
+	                    workersList.push(node);
+	                    data.push(node.data);
+	                }
+
+	                numRunning += 1;
+
+	                if (q._tasks.length === 0) {
+	                    q.empty();
+	                }
+
+	                if (numRunning === q.concurrency) {
+	                    q.saturated();
+	                }
+
+	                var cb = onlyOnce(_next(tasks));
+	                _worker(data, cb);
+	            }
+	            isProcessing = false;
+	        },
+	        length: function () {
+	            return q._tasks.length;
+	        },
+	        running: function () {
+	            return numRunning;
+	        },
+	        workersList: function () {
+	            return workersList;
+	        },
+	        idle: function() {
+	            return q._tasks.length + numRunning === 0;
+	        },
+	        pause: function () {
+	            q.paused = true;
+	        },
+	        resume: function () {
+	            if (q.paused === false) { return; }
+	            q.paused = false;
+	            setImmediate$1(q.process);
+	        }
+	    };
+	    return q;
+	}
+
+	/**
+	 * A cargo of tasks for the worker function to complete. Cargo inherits all of
+	 * the same methods and event callbacks as [`queue`]{@link module:ControlFlow.queue}.
+	 * @typedef {Object} CargoObject
+	 * @memberOf module:ControlFlow
+	 * @property {Function} length - A function returning the number of items
+	 * waiting to be processed. Invoke like `cargo.length()`.
+	 * @property {number} payload - An `integer` for determining how many tasks
+	 * should be process per round. This property can be changed after a `cargo` is
+	 * created to alter the payload on-the-fly.
+	 * @property {Function} push - Adds `task` to the `queue`. The callback is
+	 * called once the `worker` has finished processing the task. Instead of a
+	 * single task, an array of `tasks` can be submitted. The respective callback is
+	 * used for every task in the list. Invoke like `cargo.push(task, [callback])`.
+	 * @property {Function} saturated - A callback that is called when the
+	 * `queue.length()` hits the concurrency and further tasks will be queued.
+	 * @property {Function} empty - A callback that is called when the last item
+	 * from the `queue` is given to a `worker`.
+	 * @property {Function} drain - A callback that is called when the last item
+	 * from the `queue` has returned from the `worker`.
+	 * @property {Function} idle - a function returning false if there are items
+	 * waiting or being processed, or true if not. Invoke like `cargo.idle()`.
+	 * @property {Function} pause - a function that pauses the processing of tasks
+	 * until `resume()` is called. Invoke like `cargo.pause()`.
+	 * @property {Function} resume - a function that resumes the processing of
+	 * queued tasks when the queue is paused. Invoke like `cargo.resume()`.
+	 * @property {Function} kill - a function that removes the `drain` callback and
+	 * empties remaining tasks from the queue forcing it to go idle. Invoke like `cargo.kill()`.
+	 */
+
+	/**
+	 * Creates a `cargo` object with the specified payload. Tasks added to the
+	 * cargo will be processed altogether (up to the `payload` limit). If the
+	 * `worker` is in progress, the task is queued until it becomes available. Once
+	 * the `worker` has completed some tasks, each callback of those tasks is
+	 * called. Check out [these](https://camo.githubusercontent.com/6bbd36f4cf5b35a0f11a96dcd2e97711ffc2fb37/68747470733a2f2f662e636c6f75642e6769746875622e636f6d2f6173736574732f313637363837312f36383130382f62626330636662302d356632392d313165322d393734662d3333393763363464633835382e676966) [animations](https://camo.githubusercontent.com/f4810e00e1c5f5f8addbe3e9f49064fd5d102699/68747470733a2f2f662e636c6f75642e6769746875622e636f6d2f6173736574732f313637363837312f36383130312f38346339323036362d356632392d313165322d383134662d3964336430323431336266642e676966)
+	 * for how `cargo` and `queue` work.
+	 *
+	 * While [`queue`]{@link module:ControlFlow.queue} passes only one task to one of a group of workers
+	 * at a time, cargo passes an array of tasks to a single worker, repeating
+	 * when the worker is finished.
+	 *
+	 * @name cargo
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.queue]{@link module:ControlFlow.queue}
+	 * @category Control Flow
+	 * @param {AsyncFunction} worker - An asynchronous function for processing an array
+	 * of queued tasks. Invoked with `(tasks, callback)`.
+	 * @param {number} [payload=Infinity] - An optional `integer` for determining
+	 * how many tasks should be processed per round; if omitted, the default is
+	 * unlimited.
+	 * @returns {module:ControlFlow.CargoObject} A cargo object to manage the tasks. Callbacks can
+	 * attached as certain properties to listen for specific events during the
+	 * lifecycle of the cargo and inner queue.
+	 * @example
+	 *
+	 * // create a cargo object with payload 2
+	 * var cargo = async.cargo(function(tasks, callback) {
+	 *     for (var i=0; i<tasks.length; i++) {
+	 *         console.log('hello ' + tasks[i].name);
+	 *     }
+	 *     callback();
+	 * }, 2);
+	 *
+	 * // add some items
+	 * cargo.push({name: 'foo'}, function(err) {
+	 *     console.log('finished processing foo');
+	 * });
+	 * cargo.push({name: 'bar'}, function(err) {
+	 *     console.log('finished processing bar');
+	 * });
+	 * cargo.push({name: 'baz'}, function(err) {
+	 *     console.log('finished processing baz');
+	 * });
+	 */
+	function cargo(worker, payload) {
+	    return queue(worker, 1, payload);
+	}
+
+	/**
+	 * The same as [`eachOf`]{@link module:Collections.eachOf} but runs only a single async operation at a time.
+	 *
+	 * @name eachOfSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.eachOf]{@link module:Collections.eachOf}
+	 * @alias forEachOfSeries
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * Invoked with (item, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Invoked with (err).
+	 */
+	var eachOfSeries = doLimit(eachOfLimit, 1);
+
+	/**
+	 * Reduces `coll` into a single value using an async `iteratee` to return each
+	 * successive step. `memo` is the initial state of the reduction. This function
+	 * only operates in series.
+	 *
+	 * For performance reasons, it may make sense to split a call to this function
+	 * into a parallel map, and then use the normal `Array.prototype.reduce` on the
+	 * results. This function is for situations where each step in the reduction
+	 * needs to be async; if you can get the data before reducing it, then it's
+	 * probably a good idea to do so.
+	 *
+	 * @name reduce
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias inject
+	 * @alias foldl
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {*} memo - The initial state of the reduction.
+	 * @param {AsyncFunction} iteratee - A function applied to each item in the
+	 * array to produce the next step in the reduction.
+	 * The `iteratee` should complete with the next state of the reduction.
+	 * If the iteratee complete with an error, the reduction is stopped and the
+	 * main `callback` is immediately called with the error.
+	 * Invoked with (memo, item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result is the reduced value. Invoked with
+	 * (err, result).
+	 * @example
+	 *
+	 * async.reduce([1,2,3], 0, function(memo, item, callback) {
+	 *     // pointless async:
+	 *     process.nextTick(function() {
+	 *         callback(null, memo + item)
+	 *     });
+	 * }, function(err, result) {
+	 *     // result is now equal to the last value of memo, which is 6
+	 * });
+	 */
+	function reduce(coll, memo, iteratee, callback) {
+	    callback = once(callback || noop);
+	    var _iteratee = wrapAsync(iteratee);
+	    eachOfSeries(coll, function(x, i, callback) {
+	        _iteratee(memo, x, function(err, v) {
+	            memo = v;
+	            callback(err);
+	        });
+	    }, function(err) {
+	        callback(err, memo);
+	    });
+	}
+
+	/**
+	 * Version of the compose function that is more natural to read. Each function
+	 * consumes the return value of the previous function. It is the equivalent of
+	 * [compose]{@link module:ControlFlow.compose} with the arguments reversed.
+	 *
+	 * Each function is executed with the `this` binding of the composed function.
+	 *
+	 * @name seq
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.compose]{@link module:ControlFlow.compose}
+	 * @category Control Flow
+	 * @param {...AsyncFunction} functions - the asynchronous functions to compose
+	 * @returns {Function} a function that composes the `functions` in order
+	 * @example
+	 *
+	 * // Requires lodash (or underscore), express3 and dresende's orm2.
+	 * // Part of an app, that fetches cats of the logged user.
+	 * // This example uses `seq` function to avoid overnesting and error
+	 * // handling clutter.
+	 * app.get('/cats', function(request, response) {
+	 *     var User = request.models.User;
+	 *     async.seq(
+	 *         _.bind(User.get, User),  // 'User.get' has signature (id, callback(err, data))
+	 *         function(user, fn) {
+	 *             user.getCats(fn);      // 'getCats' has signature (callback(err, data))
+	 *         }
+	 *     )(req.session.user_id, function (err, cats) {
+	 *         if (err) {
+	 *             console.error(err);
+	 *             response.json({ status: 'error', message: err.message });
+	 *         } else {
+	 *             response.json({ status: 'ok', message: 'Cats found', data: cats });
+	 *         }
+	 *     });
+	 * });
+	 */
+	function seq(/*...functions*/) {
+	    var _functions = arrayMap(arguments, wrapAsync);
+	    return function(/*...args*/) {
+	        var args = slice(arguments);
+	        var that = this;
+
+	        var cb = args[args.length - 1];
+	        if (typeof cb == 'function') {
+	            args.pop();
+	        } else {
+	            cb = noop;
+	        }
+
+	        reduce(_functions, args, function(newargs, fn, cb) {
+	            fn.apply(that, newargs.concat(function(err/*, ...nextargs*/) {
+	                var nextargs = slice(arguments, 1);
+	                cb(err, nextargs);
+	            }));
+	        },
+	        function(err, results) {
+	            cb.apply(that, [err].concat(results));
+	        });
+	    };
+	}
+
+	/**
+	 * Creates a function which is a composition of the passed asynchronous
+	 * functions. Each function consumes the return value of the function that
+	 * follows. Composing functions `f()`, `g()`, and `h()` would produce the result
+	 * of `f(g(h()))`, only this version uses callbacks to obtain the return values.
+	 *
+	 * Each function is executed with the `this` binding of the composed function.
+	 *
+	 * @name compose
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {...AsyncFunction} functions - the asynchronous functions to compose
+	 * @returns {Function} an asynchronous function that is the composed
+	 * asynchronous `functions`
+	 * @example
+	 *
+	 * function add1(n, callback) {
+	 *     setTimeout(function () {
+	 *         callback(null, n + 1);
+	 *     }, 10);
+	 * }
+	 *
+	 * function mul3(n, callback) {
+	 *     setTimeout(function () {
+	 *         callback(null, n * 3);
+	 *     }, 10);
+	 * }
+	 *
+	 * var add1mul3 = async.compose(mul3, add1);
+	 * add1mul3(4, function (err, result) {
+	 *     // result now equals 15
+	 * });
+	 */
+	var compose = function(/*...args*/) {
+	    return seq.apply(null, slice(arguments).reverse());
+	};
+
+	var _concat = Array.prototype.concat;
+
+	/**
+	 * The same as [`concat`]{@link module:Collections.concat} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name concatLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.concat]{@link module:Collections.concat}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - A function to apply to each item in `coll`,
+	 * which should use an array as its result. Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished, or an error occurs. Results is an array
+	 * containing the concatenated results of the `iteratee` function. Invoked with
+	 * (err, results).
+	 */
+	var concatLimit = function(coll, limit, iteratee, callback) {
+	    callback = callback || noop;
+	    var _iteratee = wrapAsync(iteratee);
+	    mapLimit(coll, limit, function(val, callback) {
+	        _iteratee(val, function(err /*, ...args*/) {
+	            if (err) return callback(err);
+	            return callback(null, slice(arguments, 1));
+	        });
+	    }, function(err, mapResults) {
+	        var result = [];
+	        for (var i = 0; i < mapResults.length; i++) {
+	            if (mapResults[i]) {
+	                result = _concat.apply(result, mapResults[i]);
+	            }
+	        }
+
+	        return callback(err, result);
+	    });
+	};
+
+	/**
+	 * Applies `iteratee` to each item in `coll`, concatenating the results. Returns
+	 * the concatenated list. The `iteratee`s are called in parallel, and the
+	 * results are concatenated as they return. There is no guarantee that the
+	 * results array will be returned in the original order of `coll` passed to the
+	 * `iteratee` function.
+	 *
+	 * @name concat
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A function to apply to each item in `coll`,
+	 * which should use an array as its result. Invoked with (item, callback).
+	 * @param {Function} [callback(err)] - A callback which is called after all the
+	 * `iteratee` functions have finished, or an error occurs. Results is an array
+	 * containing the concatenated results of the `iteratee` function. Invoked with
+	 * (err, results).
+	 * @example
+	 *
+	 * async.concat(['dir1','dir2','dir3'], fs.readdir, function(err, files) {
+	 *     // files is now a list of filenames that exist in the 3 directories
+	 * });
+	 */
+	var concat = doLimit(concatLimit, Infinity);
+
+	/**
+	 * The same as [`concat`]{@link module:Collections.concat} but runs only a single async operation at a time.
+	 *
+	 * @name concatSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.concat]{@link module:Collections.concat}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A function to apply to each item in `coll`.
+	 * The iteratee should complete with an array an array of results.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback(err)] - A callback which is called after all the
+	 * `iteratee` functions have finished, or an error occurs. Results is an array
+	 * containing the concatenated results of the `iteratee` function. Invoked with
+	 * (err, results).
+	 */
+	var concatSeries = doLimit(concatLimit, 1);
+
+	/**
+	 * Returns a function that when called, calls-back with the values provided.
+	 * Useful as the first function in a [`waterfall`]{@link module:ControlFlow.waterfall}, or for plugging values in to
+	 * [`auto`]{@link module:ControlFlow.auto}.
+	 *
+	 * @name constant
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {...*} arguments... - Any number of arguments to automatically invoke
+	 * callback with.
+	 * @returns {AsyncFunction} Returns a function that when invoked, automatically
+	 * invokes the callback with the previous given arguments.
+	 * @example
+	 *
+	 * async.waterfall([
+	 *     async.constant(42),
+	 *     function (value, next) {
+	 *         // value === 42
+	 *     },
+	 *     //...
+	 * ], callback);
+	 *
+	 * async.waterfall([
+	 *     async.constant(filename, "utf8"),
+	 *     fs.readFile,
+	 *     function (fileData, next) {
+	 *         //...
+	 *     }
+	 *     //...
+	 * ], callback);
+	 *
+	 * async.auto({
+	 *     hostname: async.constant("https://server.net/"),
+	 *     port: findFreePort,
+	 *     launchServer: ["hostname", "port", function (options, cb) {
+	 *         startServer(options, cb);
+	 *     }],
+	 *     //...
+	 * }, callback);
+	 */
+	var constant = function(/*...values*/) {
+	    var values = slice(arguments);
+	    var args = [null].concat(values);
+	    return function (/*...ignoredArgs, callback*/) {
+	        var callback = arguments[arguments.length - 1];
+	        return callback.apply(this, args);
+	    };
+	};
+
+	/**
+	 * This method returns the first argument it receives.
+	 *
+	 * @static
+	 * @since 0.1.0
+	 * @memberOf _
+	 * @category Util
+	 * @param {*} value Any value.
+	 * @returns {*} Returns `value`.
+	 * @example
+	 *
+	 * var object = { 'a': 1 };
+	 *
+	 * console.log(_.identity(object) === object);
+	 * // => true
+	 */
+	function identity(value) {
+	  return value;
+	}
+
+	function _createTester(check, getResult) {
+	    return function(eachfn, arr, iteratee, cb) {
+	        cb = cb || noop;
+	        var testPassed = false;
+	        var testResult;
+	        eachfn(arr, function(value, _, callback) {
+	            iteratee(value, function(err, result) {
+	                if (err) {
+	                    callback(err);
+	                } else if (check(result) && !testResult) {
+	                    testPassed = true;
+	                    testResult = getResult(true, value);
+	                    callback(null, breakLoop);
+	                } else {
+	                    callback();
+	                }
+	            });
+	        }, function(err) {
+	            if (err) {
+	                cb(err);
+	            } else {
+	                cb(null, testPassed ? testResult : getResult(false));
+	            }
+	        });
+	    };
+	}
+
+	function _findGetResult(v, x) {
+	    return x;
+	}
+
+	/**
+	 * Returns the first value in `coll` that passes an async truth test. The
+	 * `iteratee` is applied in parallel, meaning the first iteratee to return
+	 * `true` will fire the detect `callback` with that result. That means the
+	 * result might not be the first item in the original `coll` (in terms of order)
+	 * that passes the test.
+
+	 * If order within the original `coll` is important, then look at
+	 * [`detectSeries`]{@link module:Collections.detectSeries}.
+	 *
+	 * @name detect
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias find
+	 * @category Collections
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A truth test to apply to each item in `coll`.
+	 * The iteratee must complete with a boolean value as its result.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the `iteratee` functions have finished.
+	 * Result will be the first item in the array that passes the truth test
+	 * (iteratee) or the value `undefined` if none passed. Invoked with
+	 * (err, result).
+	 * @example
+	 *
+	 * async.detect(['file1','file2','file3'], function(filePath, callback) {
+	 *     fs.access(filePath, function(err) {
+	 *         callback(null, !err)
+	 *     });
+	 * }, function(err, result) {
+	 *     // result now equals the first file in the list that exists
+	 * });
+	 */
+	var detect = doParallel(_createTester(identity, _findGetResult));
+
+	/**
+	 * The same as [`detect`]{@link module:Collections.detect} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name detectLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.detect]{@link module:Collections.detect}
+	 * @alias findLimit
+	 * @category Collections
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - A truth test to apply to each item in `coll`.
+	 * The iteratee must complete with a boolean value as its result.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the `iteratee` functions have finished.
+	 * Result will be the first item in the array that passes the truth test
+	 * (iteratee) or the value `undefined` if none passed. Invoked with
+	 * (err, result).
+	 */
+	var detectLimit = doParallelLimit(_createTester(identity, _findGetResult));
+
+	/**
+	 * The same as [`detect`]{@link module:Collections.detect} but runs only a single async operation at a time.
+	 *
+	 * @name detectSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.detect]{@link module:Collections.detect}
+	 * @alias findSeries
+	 * @category Collections
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A truth test to apply to each item in `coll`.
+	 * The iteratee must complete with a boolean value as its result.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the `iteratee` functions have finished.
+	 * Result will be the first item in the array that passes the truth test
+	 * (iteratee) or the value `undefined` if none passed. Invoked with
+	 * (err, result).
+	 */
+	var detectSeries = doLimit(detectLimit, 1);
+
+	function consoleFunc(name) {
+	    return function (fn/*, ...args*/) {
+	        var args = slice(arguments, 1);
+	        args.push(function (err/*, ...args*/) {
+	            var args = slice(arguments, 1);
+	            if (typeof console === 'object') {
+	                if (err) {
+	                    if (console.error) {
+	                        console.error(err);
+	                    }
+	                } else if (console[name]) {
+	                    arrayEach(args, function (x) {
+	                        console[name](x);
+	                    });
+	                }
+	            }
+	        });
+	        wrapAsync(fn).apply(null, args);
+	    };
+	}
+
+	/**
+	 * Logs the result of an [`async` function]{@link AsyncFunction} to the
+	 * `console` using `console.dir` to display the properties of the resulting object.
+	 * Only works in Node.js or in browsers that support `console.dir` and
+	 * `console.error` (such as FF and Chrome).
+	 * If multiple arguments are returned from the async function,
+	 * `console.dir` is called on each argument in order.
+	 *
+	 * @name dir
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} function - The function you want to eventually apply
+	 * all arguments to.
+	 * @param {...*} arguments... - Any number of arguments to apply to the function.
+	 * @example
+	 *
+	 * // in a module
+	 * var hello = function(name, callback) {
+	 *     setTimeout(function() {
+	 *         callback(null, {hello: name});
+	 *     }, 1000);
+	 * };
+	 *
+	 * // in the node repl
+	 * node> async.dir(hello, 'world');
+	 * {hello: 'world'}
+	 */
+	var dir = consoleFunc('dir');
+
+	/**
+	 * The post-check version of [`during`]{@link module:ControlFlow.during}. To reflect the difference in
+	 * the order of operations, the arguments `test` and `fn` are switched.
+	 *
+	 * Also a version of [`doWhilst`]{@link module:ControlFlow.doWhilst} with asynchronous `test` function.
+	 * @name doDuring
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.during]{@link module:ControlFlow.during}
+	 * @category Control Flow
+	 * @param {AsyncFunction} fn - An async function which is called each time
+	 * `test` passes. Invoked with (callback).
+	 * @param {AsyncFunction} test - asynchronous truth test to perform before each
+	 * execution of `fn`. Invoked with (...args, callback), where `...args` are the
+	 * non-error args from the previous callback of `fn`.
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has failed and repeated execution of `fn` has stopped. `callback`
+	 * will be passed an error if one occurred, otherwise `null`.
+	 */
+	function doDuring(fn, test, callback) {
+	    callback = onlyOnce(callback || noop);
+	    var _fn = wrapAsync(fn);
+	    var _test = wrapAsync(test);
+
+	    function next(err/*, ...args*/) {
+	        if (err) return callback(err);
+	        var args = slice(arguments, 1);
+	        args.push(check);
+	        _test.apply(this, args);
+	    }
+
+	    function check(err, truth) {
+	        if (err) return callback(err);
+	        if (!truth) return callback(null);
+	        _fn(next);
+	    }
+
+	    check(null, true);
+
+	}
+
+	/**
+	 * The post-check version of [`whilst`]{@link module:ControlFlow.whilst}. To reflect the difference in
+	 * the order of operations, the arguments `test` and `iteratee` are switched.
+	 *
+	 * `doWhilst` is to `whilst` as `do while` is to `while` in plain JavaScript.
+	 *
+	 * @name doWhilst
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.whilst]{@link module:ControlFlow.whilst}
+	 * @category Control Flow
+	 * @param {AsyncFunction} iteratee - A function which is called each time `test`
+	 * passes. Invoked with (callback).
+	 * @param {Function} test - synchronous truth test to perform after each
+	 * execution of `iteratee`. Invoked with any non-error callback results of
+	 * `iteratee`.
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has failed and repeated execution of `iteratee` has stopped.
+	 * `callback` will be passed an error and any arguments passed to the final
+	 * `iteratee`'s callback. Invoked with (err, [results]);
+	 */
+	function doWhilst(iteratee, test, callback) {
+	    callback = onlyOnce(callback || noop);
+	    var _iteratee = wrapAsync(iteratee);
+	    var next = function(err/*, ...args*/) {
+	        if (err) return callback(err);
+	        var args = slice(arguments, 1);
+	        if (test.apply(this, args)) return _iteratee(next);
+	        callback.apply(null, [null].concat(args));
+	    };
+	    _iteratee(next);
+	}
+
+	/**
+	 * Like ['doWhilst']{@link module:ControlFlow.doWhilst}, except the `test` is inverted. Note the
+	 * argument ordering differs from `until`.
+	 *
+	 * @name doUntil
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.doWhilst]{@link module:ControlFlow.doWhilst}
+	 * @category Control Flow
+	 * @param {AsyncFunction} iteratee - An async function which is called each time
+	 * `test` fails. Invoked with (callback).
+	 * @param {Function} test - synchronous truth test to perform after each
+	 * execution of `iteratee`. Invoked with any non-error callback results of
+	 * `iteratee`.
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has passed and repeated execution of `iteratee` has stopped. `callback`
+	 * will be passed an error and any arguments passed to the final `iteratee`'s
+	 * callback. Invoked with (err, [results]);
+	 */
+	function doUntil(iteratee, test, callback) {
+	    doWhilst(iteratee, function() {
+	        return !test.apply(this, arguments);
+	    }, callback);
+	}
+
+	/**
+	 * Like [`whilst`]{@link module:ControlFlow.whilst}, except the `test` is an asynchronous function that
+	 * is passed a callback in the form of `function (err, truth)`. If error is
+	 * passed to `test` or `fn`, the main callback is immediately called with the
+	 * value of the error.
+	 *
+	 * @name during
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.whilst]{@link module:ControlFlow.whilst}
+	 * @category Control Flow
+	 * @param {AsyncFunction} test - asynchronous truth test to perform before each
+	 * execution of `fn`. Invoked with (callback).
+	 * @param {AsyncFunction} fn - An async function which is called each time
+	 * `test` passes. Invoked with (callback).
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has failed and repeated execution of `fn` has stopped. `callback`
+	 * will be passed an error, if one occurred, otherwise `null`.
+	 * @example
+	 *
+	 * var count = 0;
+	 *
+	 * async.during(
+	 *     function (callback) {
+	 *         return callback(null, count < 5);
+	 *     },
+	 *     function (callback) {
+	 *         count++;
+	 *         setTimeout(callback, 1000);
+	 *     },
+	 *     function (err) {
+	 *         // 5 seconds have passed
+	 *     }
+	 * );
+	 */
+	function during(test, fn, callback) {
+	    callback = onlyOnce(callback || noop);
+	    var _fn = wrapAsync(fn);
+	    var _test = wrapAsync(test);
+
+	    function next(err) {
+	        if (err) return callback(err);
+	        _test(check);
+	    }
+
+	    function check(err, truth) {
+	        if (err) return callback(err);
+	        if (!truth) return callback(null);
+	        _fn(next);
+	    }
+
+	    _test(check);
+	}
+
+	function _withoutIndex(iteratee) {
+	    return function (value, index, callback) {
+	        return iteratee(value, callback);
+	    };
+	}
+
+	/**
+	 * Applies the function `iteratee` to each item in `coll`, in parallel.
+	 * The `iteratee` is called with an item from the list, and a callback for when
+	 * it has finished. If the `iteratee` passes an error to its `callback`, the
+	 * main `callback` (for the `each` function) is immediately called with the
+	 * error.
+	 *
+	 * Note, that since this function applies `iteratee` to each item in parallel,
+	 * there is no guarantee that the iteratee functions will complete in order.
+	 *
+	 * @name each
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias forEach
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to
+	 * each item in `coll`. Invoked with (item, callback).
+	 * The array index is not passed to the iteratee.
+	 * If you need the index, use `eachOf`.
+	 * @param {Function} [callback] - A callback which is called when all
+	 * `iteratee` functions have finished, or an error occurs. Invoked with (err).
+	 * @example
+	 *
+	 * // assuming openFiles is an array of file names and saveFile is a function
+	 * // to save the modified contents of that file:
+	 *
+	 * async.each(openFiles, saveFile, function(err){
+	 *   // if any of the saves produced an error, err would equal that error
+	 * });
+	 *
+	 * // assuming openFiles is an array of file names
+	 * async.each(openFiles, function(file, callback) {
+	 *
+	 *     // Perform operation on file here.
+	 *     console.log('Processing file ' + file);
+	 *
+	 *     if( file.length > 32 ) {
+	 *       console.log('This file name is too long');
+	 *       callback('File name too long');
+	 *     } else {
+	 *       // Do work to process file here
+	 *       console.log('File processed');
+	 *       callback();
+	 *     }
+	 * }, function(err) {
+	 *     // if any of the file processing produced an error, err would equal that error
+	 *     if( err ) {
+	 *       // One of the iterations produced an error.
+	 *       // All processing will now stop.
+	 *       console.log('A file failed to process');
+	 *     } else {
+	 *       console.log('All files have been processed successfully');
+	 *     }
+	 * });
+	 */
+	function eachLimit(coll, iteratee, callback) {
+	    eachOf(coll, _withoutIndex(wrapAsync(iteratee)), callback);
+	}
+
+	/**
+	 * The same as [`each`]{@link module:Collections.each} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name eachLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.each]{@link module:Collections.each}
+	 * @alias forEachLimit
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The array index is not passed to the iteratee.
+	 * If you need the index, use `eachOfLimit`.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called when all
+	 * `iteratee` functions have finished, or an error occurs. Invoked with (err).
+	 */
+	function eachLimit$1(coll, limit, iteratee, callback) {
+	    _eachOfLimit(limit)(coll, _withoutIndex(wrapAsync(iteratee)), callback);
+	}
+
+	/**
+	 * The same as [`each`]{@link module:Collections.each} but runs only a single async operation at a time.
+	 *
+	 * @name eachSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.each]{@link module:Collections.each}
+	 * @alias forEachSeries
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each
+	 * item in `coll`.
+	 * The array index is not passed to the iteratee.
+	 * If you need the index, use `eachOfSeries`.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called when all
+	 * `iteratee` functions have finished, or an error occurs. Invoked with (err).
+	 */
+	var eachSeries = doLimit(eachLimit$1, 1);
+
+	/**
+	 * Wrap an async function and ensure it calls its callback on a later tick of
+	 * the event loop.  If the function already calls its callback on a next tick,
+	 * no extra deferral is added. This is useful for preventing stack overflows
+	 * (`RangeError: Maximum call stack size exceeded`) and generally keeping
+	 * [Zalgo](http://blog.izs.me/post/59142742143/designing-apis-for-asynchrony)
+	 * contained. ES2017 `async` functions are returned as-is -- they are immune
+	 * to Zalgo's corrupting influences, as they always resolve on a later tick.
+	 *
+	 * @name ensureAsync
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} fn - an async function, one that expects a node-style
+	 * callback as its last argument.
+	 * @returns {AsyncFunction} Returns a wrapped function with the exact same call
+	 * signature as the function passed in.
+	 * @example
+	 *
+	 * function sometimesAsync(arg, callback) {
+	 *     if (cache[arg]) {
+	 *         return callback(null, cache[arg]); // this would be synchronous!!
+	 *     } else {
+	 *         doSomeIO(arg, callback); // this IO would be asynchronous
+	 *     }
+	 * }
+	 *
+	 * // this has a risk of stack overflows if many results are cached in a row
+	 * async.mapSeries(args, sometimesAsync, done);
+	 *
+	 * // this will defer sometimesAsync's callback if necessary,
+	 * // preventing stack overflows
+	 * async.mapSeries(args, async.ensureAsync(sometimesAsync), done);
+	 */
+	function ensureAsync(fn) {
+	    if (isAsync(fn)) return fn;
+	    return initialParams(function (args, callback) {
+	        var sync = true;
+	        args.push(function () {
+	            var innerArgs = arguments;
+	            if (sync) {
+	                setImmediate$1(function () {
+	                    callback.apply(null, innerArgs);
+	                });
+	            } else {
+	                callback.apply(null, innerArgs);
+	            }
+	        });
+	        fn.apply(this, args);
+	        sync = false;
+	    });
+	}
+
+	function notId(v) {
+	    return !v;
+	}
+
+	/**
+	 * Returns `true` if every element in `coll` satisfies an async test. If any
+	 * iteratee call returns `false`, the main `callback` is immediately called.
+	 *
+	 * @name every
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias all
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collection in parallel.
+	 * The iteratee must complete with a boolean result value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result will be either `true` or `false`
+	 * depending on the values of the async tests. Invoked with (err, result).
+	 * @example
+	 *
+	 * async.every(['file1','file2','file3'], function(filePath, callback) {
+	 *     fs.access(filePath, function(err) {
+	 *         callback(null, !err)
+	 *     });
+	 * }, function(err, result) {
+	 *     // if result is true then every file exists
+	 * });
+	 */
+	var every = doParallel(_createTester(notId, notId));
+
+	/**
+	 * The same as [`every`]{@link module:Collections.every} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name everyLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.every]{@link module:Collections.every}
+	 * @alias allLimit
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collection in parallel.
+	 * The iteratee must complete with a boolean result value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result will be either `true` or `false`
+	 * depending on the values of the async tests. Invoked with (err, result).
+	 */
+	var everyLimit = doParallelLimit(_createTester(notId, notId));
+
+	/**
+	 * The same as [`every`]{@link module:Collections.every} but runs only a single async operation at a time.
+	 *
+	 * @name everySeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.every]{@link module:Collections.every}
+	 * @alias allSeries
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collection in series.
+	 * The iteratee must complete with a boolean result value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result will be either `true` or `false`
+	 * depending on the values of the async tests. Invoked with (err, result).
+	 */
+	var everySeries = doLimit(everyLimit, 1);
+
+	/**
+	 * The base implementation of `_.property` without support for deep paths.
+	 *
+	 * @private
+	 * @param {string} key The key of the property to get.
+	 * @returns {Function} Returns the new accessor function.
+	 */
+	function baseProperty(key) {
+	  return function(object) {
+	    return object == null ? undefined : object[key];
+	  };
+	}
+
+	function filterArray(eachfn, arr, iteratee, callback) {
+	    var truthValues = new Array(arr.length);
+	    eachfn(arr, function (x, index, callback) {
+	        iteratee(x, function (err, v) {
+	            truthValues[index] = !!v;
+	            callback(err);
+	        });
+	    }, function (err) {
+	        if (err) return callback(err);
+	        var results = [];
+	        for (var i = 0; i < arr.length; i++) {
+	            if (truthValues[i]) results.push(arr[i]);
+	        }
+	        callback(null, results);
+	    });
+	}
+
+	function filterGeneric(eachfn, coll, iteratee, callback) {
+	    var results = [];
+	    eachfn(coll, function (x, index, callback) {
+	        iteratee(x, function (err, v) {
+	            if (err) {
+	                callback(err);
+	            } else {
+	                if (v) {
+	                    results.push({index: index, value: x});
+	                }
+	                callback();
+	            }
+	        });
+	    }, function (err) {
+	        if (err) {
+	            callback(err);
+	        } else {
+	            callback(null, arrayMap(results.sort(function (a, b) {
+	                return a.index - b.index;
+	            }), baseProperty('value')));
+	        }
+	    });
+	}
+
+	function _filter(eachfn, coll, iteratee, callback) {
+	    var filter = isArrayLike(coll) ? filterArray : filterGeneric;
+	    filter(eachfn, coll, wrapAsync(iteratee), callback || noop);
+	}
+
+	/**
+	 * Returns a new array of all the values in `coll` which pass an async truth
+	 * test. This operation is performed in parallel, but the results array will be
+	 * in the same order as the original.
+	 *
+	 * @name filter
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias select
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {Function} iteratee - A truth test to apply to each item in `coll`.
+	 * The `iteratee` is passed a `callback(err, truthValue)`, which must be called
+	 * with a boolean argument once it has completed. Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results).
+	 * @example
+	 *
+	 * async.filter(['file1','file2','file3'], function(filePath, callback) {
+	 *     fs.access(filePath, function(err) {
+	 *         callback(null, !err)
+	 *     });
+	 * }, function(err, results) {
+	 *     // results now equals an array of the existing files
+	 * });
+	 */
+	var filter = doParallel(_filter);
+
+	/**
+	 * The same as [`filter`]{@link module:Collections.filter} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name filterLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.filter]{@link module:Collections.filter}
+	 * @alias selectLimit
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {Function} iteratee - A truth test to apply to each item in `coll`.
+	 * The `iteratee` is passed a `callback(err, truthValue)`, which must be called
+	 * with a boolean argument once it has completed. Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results).
+	 */
+	var filterLimit = doParallelLimit(_filter);
+
+	/**
+	 * The same as [`filter`]{@link module:Collections.filter} but runs only a single async operation at a time.
+	 *
+	 * @name filterSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.filter]{@link module:Collections.filter}
+	 * @alias selectSeries
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {Function} iteratee - A truth test to apply to each item in `coll`.
+	 * The `iteratee` is passed a `callback(err, truthValue)`, which must be called
+	 * with a boolean argument once it has completed. Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results)
+	 */
+	var filterSeries = doLimit(filterLimit, 1);
+
+	/**
+	 * Calls the asynchronous function `fn` with a callback parameter that allows it
+	 * to call itself again, in series, indefinitely.
+
+	 * If an error is passed to the callback then `errback` is called with the
+	 * error, and execution stops, otherwise it will never be called.
+	 *
+	 * @name forever
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {AsyncFunction} fn - an async function to call repeatedly.
+	 * Invoked with (next).
+	 * @param {Function} [errback] - when `fn` passes an error to it's callback,
+	 * this function will be called, and execution stops. Invoked with (err).
+	 * @example
+	 *
+	 * async.forever(
+	 *     function(next) {
+	 *         // next is suitable for passing to things that need a callback(err [, whatever]);
+	 *         // it will result in this function being called again.
+	 *     },
+	 *     function(err) {
+	 *         // if next is called with a value in its first parameter, it will appear
+	 *         // in here as 'err', and execution will stop.
+	 *     }
+	 * );
+	 */
+	function forever(fn, errback) {
+	    var done = onlyOnce(errback || noop);
+	    var task = wrapAsync(ensureAsync(fn));
+
+	    function next(err) {
+	        if (err) return done(err);
+	        task(next);
+	    }
+	    next();
+	}
+
+	/**
+	 * The same as [`groupBy`]{@link module:Collections.groupBy} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name groupByLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.groupBy]{@link module:Collections.groupBy}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with a `key` to group the value under.
+	 * Invoked with (value, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Result is an `Object` whoses
+	 * properties are arrays of values which returned the corresponding key.
+	 */
+	var groupByLimit = function(coll, limit, iteratee, callback) {
+	    callback = callback || noop;
+	    var _iteratee = wrapAsync(iteratee);
+	    mapLimit(coll, limit, function(val, callback) {
+	        _iteratee(val, function(err, key) {
+	            if (err) return callback(err);
+	            return callback(null, {key: key, val: val});
+	        });
+	    }, function(err, mapResults) {
+	        var result = {};
+	        // from MDN, handle object having an `hasOwnProperty` prop
+	        var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+	        for (var i = 0; i < mapResults.length; i++) {
+	            if (mapResults[i]) {
+	                var key = mapResults[i].key;
+	                var val = mapResults[i].val;
+
+	                if (hasOwnProperty.call(result, key)) {
+	                    result[key].push(val);
+	                } else {
+	                    result[key] = [val];
+	                }
+	            }
+	        }
+
+	        return callback(err, result);
+	    });
+	};
+
+	/**
+	 * Returns a new object, where each value corresponds to an array of items, from
+	 * `coll`, that returned the corresponding key. That is, the keys of the object
+	 * correspond to the values passed to the `iteratee` callback.
+	 *
+	 * Note: Since this function applies the `iteratee` to each item in parallel,
+	 * there is no guarantee that the `iteratee` functions will complete in order.
+	 * However, the values for each key in the `result` will be in the same order as
+	 * the original `coll`. For Objects, the values will roughly be in the order of
+	 * the original Objects' keys (but this can vary across JavaScript engines).
+	 *
+	 * @name groupBy
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with a `key` to group the value under.
+	 * Invoked with (value, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Result is an `Object` whoses
+	 * properties are arrays of values which returned the corresponding key.
+	 * @example
+	 *
+	 * async.groupBy(['userId1', 'userId2', 'userId3'], function(userId, callback) {
+	 *     db.findById(userId, function(err, user) {
+	 *         if (err) return callback(err);
+	 *         return callback(null, user.age);
+	 *     });
+	 * }, function(err, result) {
+	 *     // result is object containing the userIds grouped by age
+	 *     // e.g. { 30: ['userId1', 'userId3'], 42: ['userId2']};
+	 * });
+	 */
+	var groupBy = doLimit(groupByLimit, Infinity);
+
+	/**
+	 * The same as [`groupBy`]{@link module:Collections.groupBy} but runs only a single async operation at a time.
+	 *
+	 * @name groupBySeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.groupBy]{@link module:Collections.groupBy}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with a `key` to group the value under.
+	 * Invoked with (value, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. Result is an `Object` whoses
+	 * properties are arrays of values which returned the corresponding key.
+	 */
+	var groupBySeries = doLimit(groupByLimit, 1);
+
+	/**
+	 * Logs the result of an `async` function to the `console`. Only works in
+	 * Node.js or in browsers that support `console.log` and `console.error` (such
+	 * as FF and Chrome). If multiple arguments are returned from the async
+	 * function, `console.log` is called on each argument in order.
+	 *
+	 * @name log
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} function - The function you want to eventually apply
+	 * all arguments to.
+	 * @param {...*} arguments... - Any number of arguments to apply to the function.
+	 * @example
+	 *
+	 * // in a module
+	 * var hello = function(name, callback) {
+	 *     setTimeout(function() {
+	 *         callback(null, 'hello ' + name);
+	 *     }, 1000);
+	 * };
+	 *
+	 * // in the node repl
+	 * node> async.log(hello, 'world');
+	 * 'hello world'
+	 */
+	var log = consoleFunc('log');
+
+	/**
+	 * The same as [`mapValues`]{@link module:Collections.mapValues} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name mapValuesLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.mapValues]{@link module:Collections.mapValues}
+	 * @category Collection
+	 * @param {Object} obj - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - A function to apply to each value and key
+	 * in `coll`.
+	 * The iteratee should complete with the transformed value as its result.
+	 * Invoked with (value, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. `result` is a new object consisting
+	 * of each key from `obj`, with each transformed value on the right-hand side.
+	 * Invoked with (err, result).
+	 */
+	function mapValuesLimit(obj, limit, iteratee, callback) {
+	    callback = once(callback || noop);
+	    var newObj = {};
+	    var _iteratee = wrapAsync(iteratee);
+	    eachOfLimit(obj, limit, function(val, key, next) {
+	        _iteratee(val, key, function (err, result) {
+	            if (err) return next(err);
+	            newObj[key] = result;
+	            next();
+	        });
+	    }, function (err) {
+	        callback(err, newObj);
+	    });
+	}
+
+	/**
+	 * A relative of [`map`]{@link module:Collections.map}, designed for use with objects.
+	 *
+	 * Produces a new Object by mapping each value of `obj` through the `iteratee`
+	 * function. The `iteratee` is called each `value` and `key` from `obj` and a
+	 * callback for when it has finished processing. Each of these callbacks takes
+	 * two arguments: an `error`, and the transformed item from `obj`. If `iteratee`
+	 * passes an error to its callback, the main `callback` (for the `mapValues`
+	 * function) is immediately called with the error.
+	 *
+	 * Note, the order of the keys in the result is not guaranteed.  The keys will
+	 * be roughly in the order they complete, (but this is very engine-specific)
+	 *
+	 * @name mapValues
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Object} obj - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A function to apply to each value and key
+	 * in `coll`.
+	 * The iteratee should complete with the transformed value as its result.
+	 * Invoked with (value, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. `result` is a new object consisting
+	 * of each key from `obj`, with each transformed value on the right-hand side.
+	 * Invoked with (err, result).
+	 * @example
+	 *
+	 * async.mapValues({
+	 *     f1: 'file1',
+	 *     f2: 'file2',
+	 *     f3: 'file3'
+	 * }, function (file, key, callback) {
+	 *   fs.stat(file, callback);
+	 * }, function(err, result) {
+	 *     // result is now a map of stats for each file, e.g.
+	 *     // {
+	 *     //     f1: [stats for file1],
+	 *     //     f2: [stats for file2],
+	 *     //     f3: [stats for file3]
+	 *     // }
+	 * });
+	 */
+
+	var mapValues = doLimit(mapValuesLimit, Infinity);
+
+	/**
+	 * The same as [`mapValues`]{@link module:Collections.mapValues} but runs only a single async operation at a time.
+	 *
+	 * @name mapValuesSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.mapValues]{@link module:Collections.mapValues}
+	 * @category Collection
+	 * @param {Object} obj - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - A function to apply to each value and key
+	 * in `coll`.
+	 * The iteratee should complete with the transformed value as its result.
+	 * Invoked with (value, key, callback).
+	 * @param {Function} [callback] - A callback which is called when all `iteratee`
+	 * functions have finished, or an error occurs. `result` is a new object consisting
+	 * of each key from `obj`, with each transformed value on the right-hand side.
+	 * Invoked with (err, result).
+	 */
+	var mapValuesSeries = doLimit(mapValuesLimit, 1);
+
+	function has(obj, key) {
+	    return key in obj;
+	}
+
+	/**
+	 * Caches the results of an async function. When creating a hash to store
+	 * function results against, the callback is omitted from the hash and an
+	 * optional hash function can be used.
+	 *
+	 * If no hash function is specified, the first argument is used as a hash key,
+	 * which may work reasonably if it is a string or a data type that converts to a
+	 * distinct string. Note that objects and arrays will not behave reasonably.
+	 * Neither will cases where the other arguments are significant. In such cases,
+	 * specify your own hash function.
+	 *
+	 * The cache of results is exposed as the `memo` property of the function
+	 * returned by `memoize`.
+	 *
+	 * @name memoize
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} fn - The async function to proxy and cache results from.
+	 * @param {Function} hasher - An optional function for generating a custom hash
+	 * for storing results. It has all the arguments applied to it apart from the
+	 * callback, and must be synchronous.
+	 * @returns {AsyncFunction} a memoized version of `fn`
+	 * @example
+	 *
+	 * var slow_fn = function(name, callback) {
+	 *     // do something
+	 *     callback(null, result);
+	 * };
+	 * var fn = async.memoize(slow_fn);
+	 *
+	 * // fn can now be used as if it were slow_fn
+	 * fn('some name', function() {
+	 *     // callback
+	 * });
+	 */
+	function memoize(fn, hasher) {
+	    var memo = Object.create(null);
+	    var queues = Object.create(null);
+	    hasher = hasher || identity;
+	    var _fn = wrapAsync(fn);
+	    var memoized = initialParams(function memoized(args, callback) {
+	        var key = hasher.apply(null, args);
+	        if (has(memo, key)) {
+	            setImmediate$1(function() {
+	                callback.apply(null, memo[key]);
+	            });
+	        } else if (has(queues, key)) {
+	            queues[key].push(callback);
+	        } else {
+	            queues[key] = [callback];
+	            _fn.apply(null, args.concat(function(/*args*/) {
+	                var args = slice(arguments);
+	                memo[key] = args;
+	                var q = queues[key];
+	                delete queues[key];
+	                for (var i = 0, l = q.length; i < l; i++) {
+	                    q[i].apply(null, args);
+	                }
+	            }));
+	        }
+	    });
+	    memoized.memo = memo;
+	    memoized.unmemoized = fn;
+	    return memoized;
+	}
+
+	/**
+	 * Calls `callback` on a later loop around the event loop. In Node.js this just
+	 * calls `setImmediate`.  In the browser it will use `setImmediate` if
+	 * available, otherwise `setTimeout(callback, 0)`, which means other higher
+	 * priority events may precede the execution of `callback`.
+	 *
+	 * This is used internally for browser-compatibility purposes.
+	 *
+	 * @name nextTick
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @alias setImmediate
+	 * @category Util
+	 * @param {Function} callback - The function to call on a later loop around
+	 * the event loop. Invoked with (args...).
+	 * @param {...*} args... - any number of additional arguments to pass to the
+	 * callback on the next tick.
+	 * @example
+	 *
+	 * var call_order = [];
+	 * async.nextTick(function() {
+	 *     call_order.push('two');
+	 *     // call_order now equals ['one','two']
+	 * });
+	 * call_order.push('one');
+	 *
+	 * async.setImmediate(function (a, b, c) {
+	 *     // a, b, and c equal 1, 2, and 3
+	 * }, 1, 2, 3);
+	 */
+	var _defer$1;
+
+	if (hasNextTick) {
+	    _defer$1 = process.nextTick;
+	} else if (hasSetImmediate) {
+	    _defer$1 = setImmediate;
+	} else {
+	    _defer$1 = fallback;
+	}
+
+	var nextTick = wrap(_defer$1);
+
+	function _parallel(eachfn, tasks, callback) {
+	    callback = callback || noop;
+	    var results = isArrayLike(tasks) ? [] : {};
+
+	    eachfn(tasks, function (task, key, callback) {
+	        wrapAsync(task)(function (err, result) {
+	            if (arguments.length > 2) {
+	                result = slice(arguments, 1);
+	            }
+	            results[key] = result;
+	            callback(err);
+	        });
+	    }, function (err) {
+	        callback(err, results);
+	    });
+	}
+
+	/**
+	 * Run the `tasks` collection of functions in parallel, without waiting until
+	 * the previous function has completed. If any of the functions pass an error to
+	 * its callback, the main `callback` is immediately called with the value of the
+	 * error. Once the `tasks` have completed, the results are passed to the final
+	 * `callback` as an array.
+	 *
+	 * **Note:** `parallel` is about kicking-off I/O tasks in parallel, not about
+	 * parallel execution of code.  If your tasks do not use any timers or perform
+	 * any I/O, they will actually be executed in series.  Any synchronous setup
+	 * sections for each task will happen one after the other.  JavaScript remains
+	 * single-threaded.
+	 *
+	 * **Hint:** Use [`reflect`]{@link module:Utils.reflect} to continue the
+	 * execution of other tasks when a task fails.
+	 *
+	 * It is also possible to use an object instead of an array. Each property will
+	 * be run as a function and the results will be passed to the final `callback`
+	 * as an object instead of an array. This can be a more readable way of handling
+	 * results from {@link async.parallel}.
+	 *
+	 * @name parallel
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} tasks - A collection of
+	 * [async functions]{@link AsyncFunction} to run.
+	 * Each async function can complete with any number of optional `result` values.
+	 * @param {Function} [callback] - An optional callback to run once all the
+	 * functions have completed successfully. This function gets a results array
+	 * (or object) containing all the result arguments passed to the task callbacks.
+	 * Invoked with (err, results).
+	 *
+	 * @example
+	 * async.parallel([
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'one');
+	 *         }, 200);
+	 *     },
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'two');
+	 *         }, 100);
+	 *     }
+	 * ],
+	 * // optional callback
+	 * function(err, results) {
+	 *     // the results array will equal ['one','two'] even though
+	 *     // the second function had a shorter timeout.
+	 * });
+	 *
+	 * // an example using an object instead of an array
+	 * async.parallel({
+	 *     one: function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 1);
+	 *         }, 200);
+	 *     },
+	 *     two: function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 2);
+	 *         }, 100);
+	 *     }
+	 * }, function(err, results) {
+	 *     // results is now equals to: {one: 1, two: 2}
+	 * });
+	 */
+	function parallelLimit(tasks, callback) {
+	    _parallel(eachOf, tasks, callback);
+	}
+
+	/**
+	 * The same as [`parallel`]{@link module:ControlFlow.parallel} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name parallelLimit
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.parallel]{@link module:ControlFlow.parallel}
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} tasks - A collection of
+	 * [async functions]{@link AsyncFunction} to run.
+	 * Each async function can complete with any number of optional `result` values.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {Function} [callback] - An optional callback to run once all the
+	 * functions have completed successfully. This function gets a results array
+	 * (or object) containing all the result arguments passed to the task callbacks.
+	 * Invoked with (err, results).
+	 */
+	function parallelLimit$1(tasks, limit, callback) {
+	    _parallel(_eachOfLimit(limit), tasks, callback);
+	}
+
+	/**
+	 * A queue of tasks for the worker function to complete.
+	 * @typedef {Object} QueueObject
+	 * @memberOf module:ControlFlow
+	 * @property {Function} length - a function returning the number of items
+	 * waiting to be processed. Invoke with `queue.length()`.
+	 * @property {boolean} started - a boolean indicating whether or not any
+	 * items have been pushed and processed by the queue.
+	 * @property {Function} running - a function returning the number of items
+	 * currently being processed. Invoke with `queue.running()`.
+	 * @property {Function} workersList - a function returning the array of items
+	 * currently being processed. Invoke with `queue.workersList()`.
+	 * @property {Function} idle - a function returning false if there are items
+	 * waiting or being processed, or true if not. Invoke with `queue.idle()`.
+	 * @property {number} concurrency - an integer for determining how many `worker`
+	 * functions should be run in parallel. This property can be changed after a
+	 * `queue` is created to alter the concurrency on-the-fly.
+	 * @property {Function} push - add a new task to the `queue`. Calls `callback`
+	 * once the `worker` has finished processing the task. Instead of a single task,
+	 * a `tasks` array can be submitted. The respective callback is used for every
+	 * task in the list. Invoke with `queue.push(task, [callback])`,
+	 * @property {Function} unshift - add a new task to the front of the `queue`.
+	 * Invoke with `queue.unshift(task, [callback])`.
+	 * @property {Function} remove - remove items from the queue that match a test
+	 * function.  The test function will be passed an object with a `data` property,
+	 * and a `priority` property, if this is a
+	 * [priorityQueue]{@link module:ControlFlow.priorityQueue} object.
+	 * Invoked with `queue.remove(testFn)`, where `testFn` is of the form
+	 * `function ({data, priority}) {}` and returns a Boolean.
+	 * @property {Function} saturated - a callback that is called when the number of
+	 * running workers hits the `concurrency` limit, and further tasks will be
+	 * queued.
+	 * @property {Function} unsaturated - a callback that is called when the number
+	 * of running workers is less than the `concurrency` & `buffer` limits, and
+	 * further tasks will not be queued.
+	 * @property {number} buffer - A minimum threshold buffer in order to say that
+	 * the `queue` is `unsaturated`.
+	 * @property {Function} empty - a callback that is called when the last item
+	 * from the `queue` is given to a `worker`.
+	 * @property {Function} drain - a callback that is called when the last item
+	 * from the `queue` has returned from the `worker`.
+	 * @property {Function} error - a callback that is called when a task errors.
+	 * Has the signature `function(error, task)`.
+	 * @property {boolean} paused - a boolean for determining whether the queue is
+	 * in a paused state.
+	 * @property {Function} pause - a function that pauses the processing of tasks
+	 * until `resume()` is called. Invoke with `queue.pause()`.
+	 * @property {Function} resume - a function that resumes the processing of
+	 * queued tasks when the queue is paused. Invoke with `queue.resume()`.
+	 * @property {Function} kill - a function that removes the `drain` callback and
+	 * empties remaining tasks from the queue forcing it to go idle. No more tasks
+	 * should be pushed to the queue after calling this function. Invoke with `queue.kill()`.
+	 */
+
+	/**
+	 * Creates a `queue` object with the specified `concurrency`. Tasks added to the
+	 * `queue` are processed in parallel (up to the `concurrency` limit). If all
+	 * `worker`s are in progress, the task is queued until one becomes available.
+	 * Once a `worker` completes a `task`, that `task`'s callback is called.
+	 *
+	 * @name queue
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {AsyncFunction} worker - An async function for processing a queued task.
+	 * If you want to handle errors from an individual task, pass a callback to
+	 * `q.push()`. Invoked with (task, callback).
+	 * @param {number} [concurrency=1] - An `integer` for determining how many
+	 * `worker` functions should be run in parallel.  If omitted, the concurrency
+	 * defaults to `1`.  If the concurrency is `0`, an error is thrown.
+	 * @returns {module:ControlFlow.QueueObject} A queue object to manage the tasks. Callbacks can
+	 * attached as certain properties to listen for specific events during the
+	 * lifecycle of the queue.
+	 * @example
+	 *
+	 * // create a queue object with concurrency 2
+	 * var q = async.queue(function(task, callback) {
+	 *     console.log('hello ' + task.name);
+	 *     callback();
+	 * }, 2);
+	 *
+	 * // assign a callback
+	 * q.drain = function() {
+	 *     console.log('all items have been processed');
+	 * };
+	 *
+	 * // add some items to the queue
+	 * q.push({name: 'foo'}, function(err) {
+	 *     console.log('finished processing foo');
+	 * });
+	 * q.push({name: 'bar'}, function (err) {
+	 *     console.log('finished processing bar');
+	 * });
+	 *
+	 * // add some items to the queue (batch-wise)
+	 * q.push([{name: 'baz'},{name: 'bay'},{name: 'bax'}], function(err) {
+	 *     console.log('finished processing item');
+	 * });
+	 *
+	 * // add some items to the front of the queue
+	 * q.unshift({name: 'bar'}, function (err) {
+	 *     console.log('finished processing bar');
+	 * });
+	 */
+	var queue$1 = function (worker, concurrency) {
+	    var _worker = wrapAsync(worker);
+	    return queue(function (items, cb) {
+	        _worker(items[0], cb);
+	    }, concurrency, 1);
+	};
+
+	/**
+	 * The same as [async.queue]{@link module:ControlFlow.queue} only tasks are assigned a priority and
+	 * completed in ascending priority order.
+	 *
+	 * @name priorityQueue
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.queue]{@link module:ControlFlow.queue}
+	 * @category Control Flow
+	 * @param {AsyncFunction} worker - An async function for processing a queued task.
+	 * If you want to handle errors from an individual task, pass a callback to
+	 * `q.push()`.
+	 * Invoked with (task, callback).
+	 * @param {number} concurrency - An `integer` for determining how many `worker`
+	 * functions should be run in parallel.  If omitted, the concurrency defaults to
+	 * `1`.  If the concurrency is `0`, an error is thrown.
+	 * @returns {module:ControlFlow.QueueObject} A priorityQueue object to manage the tasks. There are two
+	 * differences between `queue` and `priorityQueue` objects:
+	 * * `push(task, priority, [callback])` - `priority` should be a number. If an
+	 *   array of `tasks` is given, all tasks will be assigned the same priority.
+	 * * The `unshift` method was removed.
+	 */
+	var priorityQueue = function(worker, concurrency) {
+	    // Start with a normal queue
+	    var q = queue$1(worker, concurrency);
+
+	    // Override push to accept second parameter representing priority
+	    q.push = function(data, priority, callback) {
+	        if (callback == null) callback = noop;
+	        if (typeof callback !== 'function') {
+	            throw new Error('task callback must be a function');
+	        }
+	        q.started = true;
+	        if (!isArray(data)) {
+	            data = [data];
+	        }
+	        if (data.length === 0) {
+	            // call drain immediately if there are no tasks
+	            return setImmediate$1(function() {
+	                q.drain();
+	            });
+	        }
+
+	        priority = priority || 0;
+	        var nextNode = q._tasks.head;
+	        while (nextNode && priority >= nextNode.priority) {
+	            nextNode = nextNode.next;
+	        }
+
+	        for (var i = 0, l = data.length; i < l; i++) {
+	            var item = {
+	                data: data[i],
+	                priority: priority,
+	                callback: callback
+	            };
+
+	            if (nextNode) {
+	                q._tasks.insertBefore(nextNode, item);
+	            } else {
+	                q._tasks.push(item);
+	            }
+	        }
+	        setImmediate$1(q.process);
+	    };
+
+	    // Remove unshift function
+	    delete q.unshift;
+
+	    return q;
+	};
+
+	/**
+	 * Runs the `tasks` array of functions in parallel, without waiting until the
+	 * previous function has completed. Once any of the `tasks` complete or pass an
+	 * error to its callback, the main `callback` is immediately called. It's
+	 * equivalent to `Promise.race()`.
+	 *
+	 * @name race
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array} tasks - An array containing [async functions]{@link AsyncFunction}
+	 * to run. Each function can complete with an optional `result` value.
+	 * @param {Function} callback - A callback to run once any of the functions have
+	 * completed. This function gets an error or result from the first function that
+	 * completed. Invoked with (err, result).
+	 * @returns undefined
+	 * @example
+	 *
+	 * async.race([
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'one');
+	 *         }, 200);
+	 *     },
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'two');
+	 *         }, 100);
+	 *     }
+	 * ],
+	 * // main callback
+	 * function(err, result) {
+	 *     // the result will be equal to 'two' as it finishes earlier
+	 * });
+	 */
+	function race(tasks, callback) {
+	    callback = once(callback || noop);
+	    if (!isArray(tasks)) return callback(new TypeError('First argument to race must be an array of functions'));
+	    if (!tasks.length) return callback();
+	    for (var i = 0, l = tasks.length; i < l; i++) {
+	        wrapAsync(tasks[i])(callback);
+	    }
+	}
+
+	/**
+	 * Same as [`reduce`]{@link module:Collections.reduce}, only operates on `array` in reverse order.
+	 *
+	 * @name reduceRight
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.reduce]{@link module:Collections.reduce}
+	 * @alias foldr
+	 * @category Collection
+	 * @param {Array} array - A collection to iterate over.
+	 * @param {*} memo - The initial state of the reduction.
+	 * @param {AsyncFunction} iteratee - A function applied to each item in the
+	 * array to produce the next step in the reduction.
+	 * The `iteratee` should complete with the next state of the reduction.
+	 * If the iteratee complete with an error, the reduction is stopped and the
+	 * main `callback` is immediately called with the error.
+	 * Invoked with (memo, item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result is the reduced value. Invoked with
+	 * (err, result).
+	 */
+	function reduceRight (array, memo, iteratee, callback) {
+	    var reversed = slice(array).reverse();
+	    reduce(reversed, memo, iteratee, callback);
+	}
+
+	/**
+	 * Wraps the async function in another function that always completes with a
+	 * result object, even when it errors.
+	 *
+	 * The result object has either the property `error` or `value`.
+	 *
+	 * @name reflect
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} fn - The async function you want to wrap
+	 * @returns {Function} - A function that always passes null to it's callback as
+	 * the error. The second argument to the callback will be an `object` with
+	 * either an `error` or a `value` property.
+	 * @example
+	 *
+	 * async.parallel([
+	 *     async.reflect(function(callback) {
+	 *         // do some stuff ...
+	 *         callback(null, 'one');
+	 *     }),
+	 *     async.reflect(function(callback) {
+	 *         // do some more stuff but error ...
+	 *         callback('bad stuff happened');
+	 *     }),
+	 *     async.reflect(function(callback) {
+	 *         // do some more stuff ...
+	 *         callback(null, 'two');
+	 *     })
+	 * ],
+	 * // optional callback
+	 * function(err, results) {
+	 *     // values
+	 *     // results[0].value = 'one'
+	 *     // results[1].error = 'bad stuff happened'
+	 *     // results[2].value = 'two'
+	 * });
+	 */
+	function reflect(fn) {
+	    var _fn = wrapAsync(fn);
+	    return initialParams(function reflectOn(args, reflectCallback) {
+	        args.push(function callback(error, cbArg) {
+	            if (error) {
+	                reflectCallback(null, { error: error });
+	            } else {
+	                var value;
+	                if (arguments.length <= 2) {
+	                    value = cbArg;
+	                } else {
+	                    value = slice(arguments, 1);
+	                }
+	                reflectCallback(null, { value: value });
+	            }
+	        });
+
+	        return _fn.apply(this, args);
+	    });
+	}
+
+	function reject$1(eachfn, arr, iteratee, callback) {
+	    _filter(eachfn, arr, function(value, cb) {
+	        iteratee(value, function(err, v) {
+	            cb(err, !v);
+	        });
+	    }, callback);
+	}
+
+	/**
+	 * The opposite of [`filter`]{@link module:Collections.filter}. Removes values that pass an `async` truth test.
+	 *
+	 * @name reject
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.filter]{@link module:Collections.filter}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {Function} iteratee - An async truth test to apply to each item in
+	 * `coll`.
+	 * The should complete with a boolean value as its `result`.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results).
+	 * @example
+	 *
+	 * async.reject(['file1','file2','file3'], function(filePath, callback) {
+	 *     fs.access(filePath, function(err) {
+	 *         callback(null, !err)
+	 *     });
+	 * }, function(err, results) {
+	 *     // results now equals an array of missing files
+	 *     createFiles(results);
+	 * });
+	 */
+	var reject = doParallel(reject$1);
+
+	/**
+	 * A helper function that wraps an array or an object of functions with `reflect`.
+	 *
+	 * @name reflectAll
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @see [async.reflect]{@link module:Utils.reflect}
+	 * @category Util
+	 * @param {Array|Object|Iterable} tasks - The collection of
+	 * [async functions]{@link AsyncFunction} to wrap in `async.reflect`.
+	 * @returns {Array} Returns an array of async functions, each wrapped in
+	 * `async.reflect`
+	 * @example
+	 *
+	 * let tasks = [
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'one');
+	 *         }, 200);
+	 *     },
+	 *     function(callback) {
+	 *         // do some more stuff but error ...
+	 *         callback(new Error('bad stuff happened'));
+	 *     },
+	 *     function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'two');
+	 *         }, 100);
+	 *     }
+	 * ];
+	 *
+	 * async.parallel(async.reflectAll(tasks),
+	 * // optional callback
+	 * function(err, results) {
+	 *     // values
+	 *     // results[0].value = 'one'
+	 *     // results[1].error = Error('bad stuff happened')
+	 *     // results[2].value = 'two'
+	 * });
+	 *
+	 * // an example using an object instead of an array
+	 * let tasks = {
+	 *     one: function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'one');
+	 *         }, 200);
+	 *     },
+	 *     two: function(callback) {
+	 *         callback('two');
+	 *     },
+	 *     three: function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 'three');
+	 *         }, 100);
+	 *     }
+	 * };
+	 *
+	 * async.parallel(async.reflectAll(tasks),
+	 * // optional callback
+	 * function(err, results) {
+	 *     // values
+	 *     // results.one.value = 'one'
+	 *     // results.two.error = 'two'
+	 *     // results.three.value = 'three'
+	 * });
+	 */
+	function reflectAll(tasks) {
+	    var results;
+	    if (isArray(tasks)) {
+	        results = arrayMap(tasks, reflect);
+	    } else {
+	        results = {};
+	        baseForOwn(tasks, function(task, key) {
+	            results[key] = reflect.call(this, task);
+	        });
+	    }
+	    return results;
+	}
+
+	/**
+	 * The same as [`reject`]{@link module:Collections.reject} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name rejectLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.reject]{@link module:Collections.reject}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {Function} iteratee - An async truth test to apply to each item in
+	 * `coll`.
+	 * The should complete with a boolean value as its `result`.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results).
+	 */
+	var rejectLimit = doParallelLimit(reject$1);
+
+	/**
+	 * The same as [`reject`]{@link module:Collections.reject} but runs only a single async operation at a time.
+	 *
+	 * @name rejectSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.reject]{@link module:Collections.reject}
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {Function} iteratee - An async truth test to apply to each item in
+	 * `coll`.
+	 * The should complete with a boolean value as its `result`.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Invoked with (err, results).
+	 */
+	var rejectSeries = doLimit(rejectLimit, 1);
+
+	/**
+	 * Creates a function that returns `value`.
+	 *
+	 * @static
+	 * @memberOf _
+	 * @since 2.4.0
+	 * @category Util
+	 * @param {*} value The value to return from the new function.
+	 * @returns {Function} Returns the new constant function.
+	 * @example
+	 *
+	 * var objects = _.times(2, _.constant({ 'a': 1 }));
+	 *
+	 * console.log(objects);
+	 * // => [{ 'a': 1 }, { 'a': 1 }]
+	 *
+	 * console.log(objects[0] === objects[1]);
+	 * // => true
+	 */
+	function constant$1(value) {
+	  return function() {
+	    return value;
+	  };
+	}
+
+	/**
+	 * Attempts to get a successful response from `task` no more than `times` times
+	 * before returning an error. If the task is successful, the `callback` will be
+	 * passed the result of the successful task. If all attempts fail, the callback
+	 * will be passed the error and result (if any) of the final attempt.
+	 *
+	 * @name retry
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @see [async.retryable]{@link module:ControlFlow.retryable}
+	 * @param {Object|number} [opts = {times: 5, interval: 0}| 5] - Can be either an
+	 * object with `times` and `interval` or a number.
+	 * * `times` - The number of attempts to make before giving up.  The default
+	 *   is `5`.
+	 * * `interval` - The time to wait between retries, in milliseconds.  The
+	 *   default is `0`. The interval may also be specified as a function of the
+	 *   retry count (see example).
+	 * * `errorFilter` - An optional synchronous function that is invoked on
+	 *   erroneous result. If it returns `true` the retry attempts will continue;
+	 *   if the function returns `false` the retry flow is aborted with the current
+	 *   attempt's error and result being returned to the final callback.
+	 *   Invoked with (err).
+	 * * If `opts` is a number, the number specifies the number of times to retry,
+	 *   with the default interval of `0`.
+	 * @param {AsyncFunction} task - An async function to retry.
+	 * Invoked with (callback).
+	 * @param {Function} [callback] - An optional callback which is called when the
+	 * task has succeeded, or after the final failed attempt. It receives the `err`
+	 * and `result` arguments of the last attempt at completing the `task`. Invoked
+	 * with (err, results).
+	 *
+	 * @example
+	 *
+	 * // The `retry` function can be used as a stand-alone control flow by passing
+	 * // a callback, as shown below:
+	 *
+	 * // try calling apiMethod 3 times
+	 * async.retry(3, apiMethod, function(err, result) {
+	 *     // do something with the result
+	 * });
+	 *
+	 * // try calling apiMethod 3 times, waiting 200 ms between each retry
+	 * async.retry({times: 3, interval: 200}, apiMethod, function(err, result) {
+	 *     // do something with the result
+	 * });
+	 *
+	 * // try calling apiMethod 10 times with exponential backoff
+	 * // (i.e. intervals of 100, 200, 400, 800, 1600, ... milliseconds)
+	 * async.retry({
+	 *   times: 10,
+	 *   interval: function(retryCount) {
+	 *     return 50 * Math.pow(2, retryCount);
+	 *   }
+	 * }, apiMethod, function(err, result) {
+	 *     // do something with the result
+	 * });
+	 *
+	 * // try calling apiMethod the default 5 times no delay between each retry
+	 * async.retry(apiMethod, function(err, result) {
+	 *     // do something with the result
+	 * });
+	 *
+	 * // try calling apiMethod only when error condition satisfies, all other
+	 * // errors will abort the retry control flow and return to final callback
+	 * async.retry({
+	 *   errorFilter: function(err) {
+	 *     return err.message === 'Temporary error'; // only retry on a specific error
+	 *   }
+	 * }, apiMethod, function(err, result) {
+	 *     // do something with the result
+	 * });
+	 *
+	 * // It can also be embedded within other control flow functions to retry
+	 * // individual methods that are not as reliable, like this:
+	 * async.auto({
+	 *     users: api.getUsers.bind(api),
+	 *     payments: async.retryable(3, api.getPayments.bind(api))
+	 * }, function(err, results) {
+	 *     // do something with the results
+	 * });
+	 *
+	 */
+	function retry(opts, task, callback) {
+	    var DEFAULT_TIMES = 5;
+	    var DEFAULT_INTERVAL = 0;
+
+	    var options = {
+	        times: DEFAULT_TIMES,
+	        intervalFunc: constant$1(DEFAULT_INTERVAL)
+	    };
+
+	    function parseTimes(acc, t) {
+	        if (typeof t === 'object') {
+	            acc.times = +t.times || DEFAULT_TIMES;
+
+	            acc.intervalFunc = typeof t.interval === 'function' ?
+	                t.interval :
+	                constant$1(+t.interval || DEFAULT_INTERVAL);
+
+	            acc.errorFilter = t.errorFilter;
+	        } else if (typeof t === 'number' || typeof t === 'string') {
+	            acc.times = +t || DEFAULT_TIMES;
+	        } else {
+	            throw new Error("Invalid arguments for async.retry");
+	        }
+	    }
+
+	    if (arguments.length < 3 && typeof opts === 'function') {
+	        callback = task || noop;
+	        task = opts;
+	    } else {
+	        parseTimes(options, opts);
+	        callback = callback || noop;
+	    }
+
+	    if (typeof task !== 'function') {
+	        throw new Error("Invalid arguments for async.retry");
+	    }
+
+	    var _task = wrapAsync(task);
+
+	    var attempt = 1;
+	    function retryAttempt() {
+	        _task(function(err) {
+	            if (err && attempt++ < options.times &&
+	                (typeof options.errorFilter != 'function' ||
+	                    options.errorFilter(err))) {
+	                setTimeout(retryAttempt, options.intervalFunc(attempt));
+	            } else {
+	                callback.apply(null, arguments);
+	            }
+	        });
+	    }
+
+	    retryAttempt();
+	}
+
+	/**
+	 * A close relative of [`retry`]{@link module:ControlFlow.retry}.  This method
+	 * wraps a task and makes it retryable, rather than immediately calling it
+	 * with retries.
+	 *
+	 * @name retryable
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.retry]{@link module:ControlFlow.retry}
+	 * @category Control Flow
+	 * @param {Object|number} [opts = {times: 5, interval: 0}| 5] - optional
+	 * options, exactly the same as from `retry`
+	 * @param {AsyncFunction} task - the asynchronous function to wrap.
+	 * This function will be passed any arguments passed to the returned wrapper.
+	 * Invoked with (...args, callback).
+	 * @returns {AsyncFunction} The wrapped function, which when invoked, will
+	 * retry on an error, based on the parameters specified in `opts`.
+	 * This function will accept the same parameters as `task`.
+	 * @example
+	 *
+	 * async.auto({
+	 *     dep1: async.retryable(3, getFromFlakyService),
+	 *     process: ["dep1", async.retryable(3, function (results, cb) {
+	 *         maybeProcessData(results.dep1, cb);
+	 *     })]
+	 * }, callback);
+	 */
+	var retryable = function (opts, task) {
+	    if (!task) {
+	        task = opts;
+	        opts = null;
+	    }
+	    var _task = wrapAsync(task);
+	    return initialParams(function (args, callback) {
+	        function taskFn(cb) {
+	            _task.apply(null, args.concat(cb));
+	        }
+
+	        if (opts) retry(opts, taskFn, callback);
+	        else retry(taskFn, callback);
+
+	    });
+	};
+
+	/**
+	 * Run the functions in the `tasks` collection in series, each one running once
+	 * the previous function has completed. If any functions in the series pass an
+	 * error to its callback, no more functions are run, and `callback` is
+	 * immediately called with the value of the error. Otherwise, `callback`
+	 * receives an array of results when `tasks` have completed.
+	 *
+	 * It is also possible to use an object instead of an array. Each property will
+	 * be run as a function, and the results will be passed to the final `callback`
+	 * as an object instead of an array. This can be a more readable way of handling
+	 *  results from {@link async.series}.
+	 *
+	 * **Note** that while many implementations preserve the order of object
+	 * properties, the [ECMAScript Language Specification](http://www.ecma-international.org/ecma-262/5.1/#sec-8.6)
+	 * explicitly states that
+	 *
+	 * > The mechanics and order of enumerating the properties is not specified.
+	 *
+	 * So if you rely on the order in which your series of functions are executed,
+	 * and want this to work on all platforms, consider using an array.
+	 *
+	 * @name series
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} tasks - A collection containing
+	 * [async functions]{@link AsyncFunction} to run in series.
+	 * Each function can complete with any number of optional `result` values.
+	 * @param {Function} [callback] - An optional callback to run once all the
+	 * functions have completed. This function gets a results array (or object)
+	 * containing all the result arguments passed to the `task` callbacks. Invoked
+	 * with (err, result).
+	 * @example
+	 * async.series([
+	 *     function(callback) {
+	 *         // do some stuff ...
+	 *         callback(null, 'one');
+	 *     },
+	 *     function(callback) {
+	 *         // do some more stuff ...
+	 *         callback(null, 'two');
+	 *     }
+	 * ],
+	 * // optional callback
+	 * function(err, results) {
+	 *     // results is now equal to ['one', 'two']
+	 * });
+	 *
+	 * async.series({
+	 *     one: function(callback) {
+	 *         setTimeout(function() {
+	 *             callback(null, 1);
+	 *         }, 200);
+	 *     },
+	 *     two: function(callback){
+	 *         setTimeout(function() {
+	 *             callback(null, 2);
+	 *         }, 100);
+	 *     }
+	 * }, function(err, results) {
+	 *     // results is now equal to: {one: 1, two: 2}
+	 * });
+	 */
+	function series(tasks, callback) {
+	    _parallel(eachOfSeries, tasks, callback);
+	}
+
+	/**
+	 * Returns `true` if at least one element in the `coll` satisfies an async test.
+	 * If any iteratee call returns `true`, the main `callback` is immediately
+	 * called.
+	 *
+	 * @name some
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @alias any
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collections in parallel.
+	 * The iteratee should complete with a boolean `result` value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the iteratee functions have finished.
+	 * Result will be either `true` or `false` depending on the values of the async
+	 * tests. Invoked with (err, result).
+	 * @example
+	 *
+	 * async.some(['file1','file2','file3'], function(filePath, callback) {
+	 *     fs.access(filePath, function(err) {
+	 *         callback(null, !err)
+	 *     });
+	 * }, function(err, result) {
+	 *     // if result is true then at least one of the files exists
+	 * });
+	 */
+	var some = doParallel(_createTester(Boolean, identity));
+
+	/**
+	 * The same as [`some`]{@link module:Collections.some} but runs a maximum of `limit` async operations at a time.
+	 *
+	 * @name someLimit
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.some]{@link module:Collections.some}
+	 * @alias anyLimit
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collections in parallel.
+	 * The iteratee should complete with a boolean `result` value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the iteratee functions have finished.
+	 * Result will be either `true` or `false` depending on the values of the async
+	 * tests. Invoked with (err, result).
+	 */
+	var someLimit = doParallelLimit(_createTester(Boolean, identity));
+
+	/**
+	 * The same as [`some`]{@link module:Collections.some} but runs only a single async operation at a time.
+	 *
+	 * @name someSeries
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @see [async.some]{@link module:Collections.some}
+	 * @alias anySeries
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async truth test to apply to each item
+	 * in the collections in series.
+	 * The iteratee should complete with a boolean `result` value.
+	 * Invoked with (item, callback).
+	 * @param {Function} [callback] - A callback which is called as soon as any
+	 * iteratee returns `true`, or after all the iteratee functions have finished.
+	 * Result will be either `true` or `false` depending on the values of the async
+	 * tests. Invoked with (err, result).
+	 */
+	var someSeries = doLimit(someLimit, 1);
+
+	/**
+	 * Sorts a list by the results of running each `coll` value through an async
+	 * `iteratee`.
+	 *
+	 * @name sortBy
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {AsyncFunction} iteratee - An async function to apply to each item in
+	 * `coll`.
+	 * The iteratee should complete with a value to use as the sort criteria as
+	 * its `result`.
+	 * Invoked with (item, callback).
+	 * @param {Function} callback - A callback which is called after all the
+	 * `iteratee` functions have finished, or an error occurs. Results is the items
+	 * from the original `coll` sorted by the values returned by the `iteratee`
+	 * calls. Invoked with (err, results).
+	 * @example
+	 *
+	 * async.sortBy(['file1','file2','file3'], function(file, callback) {
+	 *     fs.stat(file, function(err, stats) {
+	 *         callback(err, stats.mtime);
+	 *     });
+	 * }, function(err, results) {
+	 *     // results is now the original array of files sorted by
+	 *     // modified date
+	 * });
+	 *
+	 * // By modifying the callback parameter the
+	 * // sorting order can be influenced:
+	 *
+	 * // ascending order
+	 * async.sortBy([1,9,3,5], function(x, callback) {
+	 *     callback(null, x);
+	 * }, function(err,result) {
+	 *     // result callback
+	 * });
+	 *
+	 * // descending order
+	 * async.sortBy([1,9,3,5], function(x, callback) {
+	 *     callback(null, x*-1);    //<- x*-1 instead of x, turns the order around
+	 * }, function(err,result) {
+	 *     // result callback
+	 * });
+	 */
+	function sortBy (coll, iteratee, callback) {
+	    var _iteratee = wrapAsync(iteratee);
+	    map(coll, function (x, callback) {
+	        _iteratee(x, function (err, criteria) {
+	            if (err) return callback(err);
+	            callback(null, {value: x, criteria: criteria});
+	        });
+	    }, function (err, results) {
+	        if (err) return callback(err);
+	        callback(null, arrayMap(results.sort(comparator), baseProperty('value')));
+	    });
+
+	    function comparator(left, right) {
+	        var a = left.criteria, b = right.criteria;
+	        return a < b ? -1 : a > b ? 1 : 0;
+	    }
+	}
+
+	/**
+	 * Sets a time limit on an asynchronous function. If the function does not call
+	 * its callback within the specified milliseconds, it will be called with a
+	 * timeout error. The code property for the error object will be `'ETIMEDOUT'`.
+	 *
+	 * @name timeout
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @category Util
+	 * @param {AsyncFunction} asyncFn - The async function to limit in time.
+	 * @param {number} milliseconds - The specified time limit.
+	 * @param {*} [info] - Any variable you want attached (`string`, `object`, etc)
+	 * to timeout Error for more information..
+	 * @returns {AsyncFunction} Returns a wrapped function that can be used with any
+	 * of the control flow functions.
+	 * Invoke this function with the same parameters as you would `asyncFunc`.
+	 * @example
+	 *
+	 * function myFunction(foo, callback) {
+	 *     doAsyncTask(foo, function(err, data) {
+	 *         // handle errors
+	 *         if (err) return callback(err);
+	 *
+	 *         // do some stuff ...
+	 *
+	 *         // return processed data
+	 *         return callback(null, data);
+	 *     });
+	 * }
+	 *
+	 * var wrapped = async.timeout(myFunction, 1000);
+	 *
+	 * // call `wrapped` as you would `myFunction`
+	 * wrapped({ bar: 'bar' }, function(err, data) {
+	 *     // if `myFunction` takes < 1000 ms to execute, `err`
+	 *     // and `data` will have their expected values
+	 *
+	 *     // else `err` will be an Error with the code 'ETIMEDOUT'
+	 * });
+	 */
+	function timeout(asyncFn, milliseconds, info) {
+	    var fn = wrapAsync(asyncFn);
+
+	    return initialParams(function (args, callback) {
+	        var timedOut = false;
+	        var timer;
+
+	        function timeoutCallback() {
+	            var name = asyncFn.name || 'anonymous';
+	            var error  = new Error('Callback function "' + name + '" timed out.');
+	            error.code = 'ETIMEDOUT';
+	            if (info) {
+	                error.info = info;
+	            }
+	            timedOut = true;
+	            callback(error);
+	        }
+
+	        args.push(function () {
+	            if (!timedOut) {
+	                callback.apply(null, arguments);
+	                clearTimeout(timer);
+	            }
+	        });
+
+	        // setup timer and call original function
+	        timer = setTimeout(timeoutCallback, milliseconds);
+	        fn.apply(null, args);
+	    });
+	}
+
+	/* Built-in method references for those with the same name as other `lodash` methods. */
+	var nativeCeil = Math.ceil;
+	var nativeMax = Math.max;
+
+	/**
+	 * The base implementation of `_.range` and `_.rangeRight` which doesn't
+	 * coerce arguments.
+	 *
+	 * @private
+	 * @param {number} start The start of the range.
+	 * @param {number} end The end of the range.
+	 * @param {number} step The value to increment or decrement by.
+	 * @param {boolean} [fromRight] Specify iterating from right to left.
+	 * @returns {Array} Returns the range of numbers.
+	 */
+	function baseRange(start, end, step, fromRight) {
+	  var index = -1,
+	      length = nativeMax(nativeCeil((end - start) / (step || 1)), 0),
+	      result = Array(length);
+
+	  while (length--) {
+	    result[fromRight ? length : ++index] = start;
+	    start += step;
+	  }
+	  return result;
+	}
+
+	/**
+	 * The same as [times]{@link module:ControlFlow.times} but runs a maximum of `limit` async operations at a
+	 * time.
+	 *
+	 * @name timesLimit
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.times]{@link module:ControlFlow.times}
+	 * @category Control Flow
+	 * @param {number} count - The number of times to run the function.
+	 * @param {number} limit - The maximum number of async operations at a time.
+	 * @param {AsyncFunction} iteratee - The async function to call `n` times.
+	 * Invoked with the iteration index and a callback: (n, next).
+	 * @param {Function} callback - see [async.map]{@link module:Collections.map}.
+	 */
+	function timeLimit(count, limit, iteratee, callback) {
+	    var _iteratee = wrapAsync(iteratee);
+	    mapLimit(baseRange(0, count, 1), limit, _iteratee, callback);
+	}
+
+	/**
+	 * Calls the `iteratee` function `n` times, and accumulates results in the same
+	 * manner you would use with [map]{@link module:Collections.map}.
+	 *
+	 * @name times
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.map]{@link module:Collections.map}
+	 * @category Control Flow
+	 * @param {number} n - The number of times to run the function.
+	 * @param {AsyncFunction} iteratee - The async function to call `n` times.
+	 * Invoked with the iteration index and a callback: (n, next).
+	 * @param {Function} callback - see {@link module:Collections.map}.
+	 * @example
+	 *
+	 * // Pretend this is some complicated async factory
+	 * var createUser = function(id, callback) {
+	 *     callback(null, {
+	 *         id: 'user' + id
+	 *     });
+	 * };
+	 *
+	 * // generate 5 users
+	 * async.times(5, function(n, next) {
+	 *     createUser(n, function(err, user) {
+	 *         next(err, user);
+	 *     });
+	 * }, function(err, users) {
+	 *     // we should now have 5 users
+	 * });
+	 */
+	var times = doLimit(timeLimit, Infinity);
+
+	/**
+	 * The same as [times]{@link module:ControlFlow.times} but runs only a single async operation at a time.
+	 *
+	 * @name timesSeries
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.times]{@link module:ControlFlow.times}
+	 * @category Control Flow
+	 * @param {number} n - The number of times to run the function.
+	 * @param {AsyncFunction} iteratee - The async function to call `n` times.
+	 * Invoked with the iteration index and a callback: (n, next).
+	 * @param {Function} callback - see {@link module:Collections.map}.
+	 */
+	var timesSeries = doLimit(timeLimit, 1);
+
+	/**
+	 * A relative of `reduce`.  Takes an Object or Array, and iterates over each
+	 * element in series, each step potentially mutating an `accumulator` value.
+	 * The type of the accumulator defaults to the type of collection passed in.
+	 *
+	 * @name transform
+	 * @static
+	 * @memberOf module:Collections
+	 * @method
+	 * @category Collection
+	 * @param {Array|Iterable|Object} coll - A collection to iterate over.
+	 * @param {*} [accumulator] - The initial state of the transform.  If omitted,
+	 * it will default to an empty Object or Array, depending on the type of `coll`
+	 * @param {AsyncFunction} iteratee - A function applied to each item in the
+	 * collection that potentially modifies the accumulator.
+	 * Invoked with (accumulator, item, key, callback).
+	 * @param {Function} [callback] - A callback which is called after all the
+	 * `iteratee` functions have finished. Result is the transformed accumulator.
+	 * Invoked with (err, result).
+	 * @example
+	 *
+	 * async.transform([1,2,3], function(acc, item, index, callback) {
+	 *     // pointless async:
+	 *     process.nextTick(function() {
+	 *         acc.push(item * 2)
+	 *         callback(null)
+	 *     });
+	 * }, function(err, result) {
+	 *     // result is now equal to [2, 4, 6]
+	 * });
+	 *
+	 * @example
+	 *
+	 * async.transform({a: 1, b: 2, c: 3}, function (obj, val, key, callback) {
+	 *     setImmediate(function () {
+	 *         obj[key] = val * 2;
+	 *         callback();
+	 *     })
+	 * }, function (err, result) {
+	 *     // result is equal to {a: 2, b: 4, c: 6}
+	 * })
+	 */
+	function transform (coll, accumulator, iteratee, callback) {
+	    if (arguments.length <= 3) {
+	        callback = iteratee;
+	        iteratee = accumulator;
+	        accumulator = isArray(coll) ? [] : {};
+	    }
+	    callback = once(callback || noop);
+	    var _iteratee = wrapAsync(iteratee);
+
+	    eachOf(coll, function(v, k, cb) {
+	        _iteratee(accumulator, v, k, cb);
+	    }, function(err) {
+	        callback(err, accumulator);
+	    });
+	}
+
+	/**
+	 * It runs each task in series but stops whenever any of the functions were
+	 * successful. If one of the tasks were successful, the `callback` will be
+	 * passed the result of the successful task. If all tasks fail, the callback
+	 * will be passed the error and result (if any) of the final attempt.
+	 *
+	 * @name tryEach
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array|Iterable|Object} tasks - A collection containing functions to
+	 * run, each function is passed a `callback(err, result)` it must call on
+	 * completion with an error `err` (which can be `null`) and an optional `result`
+	 * value.
+	 * @param {Function} [callback] - An optional callback which is called when one
+	 * of the tasks has succeeded, or all have failed. It receives the `err` and
+	 * `result` arguments of the last attempt at completing the `task`. Invoked with
+	 * (err, results).
+	 * @example
+	 * async.try([
+	 *     function getDataFromFirstWebsite(callback) {
+	 *         // Try getting the data from the first website
+	 *         callback(err, data);
+	 *     },
+	 *     function getDataFromSecondWebsite(callback) {
+	 *         // First website failed,
+	 *         // Try getting the data from the backup website
+	 *         callback(err, data);
+	 *     }
+	 * ],
+	 * // optional callback
+	 * function(err, results) {
+	 *     Now do something with the data.
+	 * });
+	 *
+	 */
+	function tryEach(tasks, callback) {
+	    var error = null;
+	    var result;
+	    callback = callback || noop;
+	    eachSeries(tasks, function(task, callback) {
+	        wrapAsync(task)(function (err, res/*, ...args*/) {
+	            if (arguments.length > 2) {
+	                result = slice(arguments, 1);
+	            } else {
+	                result = res;
+	            }
+	            error = err;
+	            callback(!err);
+	        });
+	    }, function () {
+	        callback(error, result);
+	    });
+	}
+
+	/**
+	 * Undoes a [memoize]{@link module:Utils.memoize}d function, reverting it to the original,
+	 * unmemoized form. Handy for testing.
+	 *
+	 * @name unmemoize
+	 * @static
+	 * @memberOf module:Utils
+	 * @method
+	 * @see [async.memoize]{@link module:Utils.memoize}
+	 * @category Util
+	 * @param {AsyncFunction} fn - the memoized function
+	 * @returns {AsyncFunction} a function that calls the original unmemoized function
+	 */
+	function unmemoize(fn) {
+	    return function () {
+	        return (fn.unmemoized || fn).apply(null, arguments);
+	    };
+	}
+
+	/**
+	 * Repeatedly call `iteratee`, while `test` returns `true`. Calls `callback` when
+	 * stopped, or an error occurs.
+	 *
+	 * @name whilst
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Function} test - synchronous truth test to perform before each
+	 * execution of `iteratee`. Invoked with ().
+	 * @param {AsyncFunction} iteratee - An async function which is called each time
+	 * `test` passes. Invoked with (callback).
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has failed and repeated execution of `iteratee` has stopped. `callback`
+	 * will be passed an error and any arguments passed to the final `iteratee`'s
+	 * callback. Invoked with (err, [results]);
+	 * @returns undefined
+	 * @example
+	 *
+	 * var count = 0;
+	 * async.whilst(
+	 *     function() { return count < 5; },
+	 *     function(callback) {
+	 *         count++;
+	 *         setTimeout(function() {
+	 *             callback(null, count);
+	 *         }, 1000);
+	 *     },
+	 *     function (err, n) {
+	 *         // 5 seconds have passed, n = 5
+	 *     }
+	 * );
+	 */
+	function whilst(test, iteratee, callback) {
+	    callback = onlyOnce(callback || noop);
+	    var _iteratee = wrapAsync(iteratee);
+	    if (!test()) return callback(null);
+	    var next = function(err/*, ...args*/) {
+	        if (err) return callback(err);
+	        if (test()) return _iteratee(next);
+	        var args = slice(arguments, 1);
+	        callback.apply(null, [null].concat(args));
+	    };
+	    _iteratee(next);
+	}
+
+	/**
+	 * Repeatedly call `iteratee` until `test` returns `true`. Calls `callback` when
+	 * stopped, or an error occurs. `callback` will be passed an error and any
+	 * arguments passed to the final `iteratee`'s callback.
+	 *
+	 * The inverse of [whilst]{@link module:ControlFlow.whilst}.
+	 *
+	 * @name until
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @see [async.whilst]{@link module:ControlFlow.whilst}
+	 * @category Control Flow
+	 * @param {Function} test - synchronous truth test to perform before each
+	 * execution of `iteratee`. Invoked with ().
+	 * @param {AsyncFunction} iteratee - An async function which is called each time
+	 * `test` fails. Invoked with (callback).
+	 * @param {Function} [callback] - A callback which is called after the test
+	 * function has passed and repeated execution of `iteratee` has stopped. `callback`
+	 * will be passed an error and any arguments passed to the final `iteratee`'s
+	 * callback. Invoked with (err, [results]);
+	 */
+	function until(test, iteratee, callback) {
+	    whilst(function() {
+	        return !test.apply(this, arguments);
+	    }, iteratee, callback);
+	}
+
+	/**
+	 * Runs the `tasks` array of functions in series, each passing their results to
+	 * the next in the array. However, if any of the `tasks` pass an error to their
+	 * own callback, the next function is not executed, and the main `callback` is
+	 * immediately called with the error.
+	 *
+	 * @name waterfall
+	 * @static
+	 * @memberOf module:ControlFlow
+	 * @method
+	 * @category Control Flow
+	 * @param {Array} tasks - An array of [async functions]{@link AsyncFunction}
+	 * to run.
+	 * Each function should complete with any number of `result` values.
+	 * The `result` values will be passed as arguments, in order, to the next task.
+	 * @param {Function} [callback] - An optional callback to run once all the
+	 * functions have completed. This will be passed the results of the last task's
+	 * callback. Invoked with (err, [results]).
+	 * @returns undefined
+	 * @example
+	 *
+	 * async.waterfall([
+	 *     function(callback) {
+	 *         callback(null, 'one', 'two');
+	 *     },
+	 *     function(arg1, arg2, callback) {
+	 *         // arg1 now equals 'one' and arg2 now equals 'two'
+	 *         callback(null, 'three');
+	 *     },
+	 *     function(arg1, callback) {
+	 *         // arg1 now equals 'three'
+	 *         callback(null, 'done');
+	 *     }
+	 * ], function (err, result) {
+	 *     // result now equals 'done'
+	 * });
+	 *
+	 * // Or, with named functions:
+	 * async.waterfall([
+	 *     myFirstFunction,
+	 *     mySecondFunction,
+	 *     myLastFunction,
+	 * ], function (err, result) {
+	 *     // result now equals 'done'
+	 * });
+	 * function myFirstFunction(callback) {
+	 *     callback(null, 'one', 'two');
+	 * }
+	 * function mySecondFunction(arg1, arg2, callback) {
+	 *     // arg1 now equals 'one' and arg2 now equals 'two'
+	 *     callback(null, 'three');
+	 * }
+	 * function myLastFunction(arg1, callback) {
+	 *     // arg1 now equals 'three'
+	 *     callback(null, 'done');
+	 * }
+	 */
+	var waterfall = function(tasks, callback) {
+	    callback = once(callback || noop);
+	    if (!isArray(tasks)) return callback(new Error('First argument to waterfall must be an array of functions'));
+	    if (!tasks.length) return callback();
+	    var taskIndex = 0;
+
+	    function nextTask(args) {
+	        var task = wrapAsync(tasks[taskIndex++]);
+	        args.push(onlyOnce(next));
+	        task.apply(null, args);
+	    }
+
+	    function next(err/*, ...args*/) {
+	        if (err || taskIndex === tasks.length) {
+	            return callback.apply(null, arguments);
+	        }
+	        nextTask(slice(arguments, 1));
+	    }
+
+	    nextTask([]);
+	};
+
+	/**
+	 * An "async function" in the context of Async is an asynchronous function with
+	 * a variable number of parameters, with the final parameter being a callback.
+	 * (`function (arg1, arg2, ..., callback) {}`)
+	 * The final callback is of the form `callback(err, results...)`, which must be
+	 * called once the function is completed.  The callback should be called with a
+	 * Error as its first argument to signal that an error occurred.
+	 * Otherwise, if no error occurred, it should be called with `null` as the first
+	 * argument, and any additional `result` arguments that may apply, to signal
+	 * successful completion.
+	 * The callback must be called exactly once, ideally on a later tick of the
+	 * JavaScript event loop.
+	 *
+	 * This type of function is also referred to as a "Node-style async function",
+	 * or a "continuation passing-style function" (CPS). Most of the methods of this
+	 * library are themselves CPS/Node-style async functions, or functions that
+	 * return CPS/Node-style async functions.
+	 *
+	 * Wherever we accept a Node-style async function, we also directly accept an
+	 * [ES2017 `async` function]{@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function}.
+	 * In this case, the `async` function will not be passed a final callback
+	 * argument, and any thrown error will be used as the `err` argument of the
+	 * implicit callback, and the return value will be used as the `result` value.
+	 * (i.e. a `rejected` of the returned Promise becomes the `err` callback
+	 * argument, and a `resolved` value becomes the `result`.)
+	 *
+	 * Note, due to JavaScript limitations, we can only detect native `async`
+	 * functions and not transpilied implementations.
+	 * Your environment must have `async`/`await` support for this to work.
+	 * (e.g. Node > v7.6, or a recent version of a modern browser).
+	 * If you are using `async` functions through a transpiler (e.g. Babel), you
+	 * must still wrap the function with [asyncify]{@link module:Utils.asyncify},
+	 * because the `async function` will be compiled to an ordinary function that
+	 * returns a promise.
+	 *
+	 * @typedef {Function} AsyncFunction
+	 * @static
+	 */
+
+	/**
+	 * Async is a utility module which provides straight-forward, powerful functions
+	 * for working with asynchronous JavaScript. Although originally designed for
+	 * use with [Node.js](http://nodejs.org) and installable via
+	 * `npm install --save async`, it can also be used directly in the browser.
+	 * @module async
+	 * @see AsyncFunction
+	 */
+
+
+	/**
+	 * A collection of `async` functions for manipulating collections, such as
+	 * arrays and objects.
+	 * @module Collections
+	 */
+
+	/**
+	 * A collection of `async` functions for controlling the flow through a script.
+	 * @module ControlFlow
+	 */
+
+	/**
+	 * A collection of `async` utility functions.
+	 * @module Utils
+	 */
+
+	var index = {
+	    applyEach: applyEach,
+	    applyEachSeries: applyEachSeries,
+	    apply: apply,
+	    asyncify: asyncify,
+	    auto: auto,
+	    autoInject: autoInject,
+	    cargo: cargo,
+	    compose: compose,
+	    concat: concat,
+	    concatLimit: concatLimit,
+	    concatSeries: concatSeries,
+	    constant: constant,
+	    detect: detect,
+	    detectLimit: detectLimit,
+	    detectSeries: detectSeries,
+	    dir: dir,
+	    doDuring: doDuring,
+	    doUntil: doUntil,
+	    doWhilst: doWhilst,
+	    during: during,
+	    each: eachLimit,
+	    eachLimit: eachLimit$1,
+	    eachOf: eachOf,
+	    eachOfLimit: eachOfLimit,
+	    eachOfSeries: eachOfSeries,
+	    eachSeries: eachSeries,
+	    ensureAsync: ensureAsync,
+	    every: every,
+	    everyLimit: everyLimit,
+	    everySeries: everySeries,
+	    filter: filter,
+	    filterLimit: filterLimit,
+	    filterSeries: filterSeries,
+	    forever: forever,
+	    groupBy: groupBy,
+	    groupByLimit: groupByLimit,
+	    groupBySeries: groupBySeries,
+	    log: log,
+	    map: map,
+	    mapLimit: mapLimit,
+	    mapSeries: mapSeries,
+	    mapValues: mapValues,
+	    mapValuesLimit: mapValuesLimit,
+	    mapValuesSeries: mapValuesSeries,
+	    memoize: memoize,
+	    nextTick: nextTick,
+	    parallel: parallelLimit,
+	    parallelLimit: parallelLimit$1,
+	    priorityQueue: priorityQueue,
+	    queue: queue$1,
+	    race: race,
+	    reduce: reduce,
+	    reduceRight: reduceRight,
+	    reflect: reflect,
+	    reflectAll: reflectAll,
+	    reject: reject,
+	    rejectLimit: rejectLimit,
+	    rejectSeries: rejectSeries,
+	    retry: retry,
+	    retryable: retryable,
+	    seq: seq,
+	    series: series,
+	    setImmediate: setImmediate$1,
+	    some: some,
+	    someLimit: someLimit,
+	    someSeries: someSeries,
+	    sortBy: sortBy,
+	    timeout: timeout,
+	    times: times,
+	    timesLimit: timeLimit,
+	    timesSeries: timesSeries,
+	    transform: transform,
+	    tryEach: tryEach,
+	    unmemoize: unmemoize,
+	    until: until,
+	    waterfall: waterfall,
+	    whilst: whilst,
+
+	    // aliases
+	    all: every,
+	    any: some,
+	    forEach: eachLimit,
+	    forEachSeries: eachSeries,
+	    forEachLimit: eachLimit$1,
+	    forEachOf: eachOf,
+	    forEachOfSeries: eachOfSeries,
+	    forEachOfLimit: eachOfLimit,
+	    inject: reduce,
+	    foldl: reduce,
+	    foldr: reduceRight,
+	    select: filter,
+	    selectLimit: filterLimit,
+	    selectSeries: filterSeries,
+	    wrapSync: asyncify
+	};
+
+	exports['default'] = index;
+	exports.applyEach = applyEach;
+	exports.applyEachSeries = applyEachSeries;
+	exports.apply = apply;
+	exports.asyncify = asyncify;
+	exports.auto = auto;
+	exports.autoInject = autoInject;
+	exports.cargo = cargo;
+	exports.compose = compose;
+	exports.concat = concat;
+	exports.concatLimit = concatLimit;
+	exports.concatSeries = concatSeries;
+	exports.constant = constant;
+	exports.detect = detect;
+	exports.detectLimit = detectLimit;
+	exports.detectSeries = detectSeries;
+	exports.dir = dir;
+	exports.doDuring = doDuring;
+	exports.doUntil = doUntil;
+	exports.doWhilst = doWhilst;
+	exports.during = during;
+	exports.each = eachLimit;
+	exports.eachLimit = eachLimit$1;
+	exports.eachOf = eachOf;
+	exports.eachOfLimit = eachOfLimit;
+	exports.eachOfSeries = eachOfSeries;
+	exports.eachSeries = eachSeries;
+	exports.ensureAsync = ensureAsync;
+	exports.every = every;
+	exports.everyLimit = everyLimit;
+	exports.everySeries = everySeries;
+	exports.filter = filter;
+	exports.filterLimit = filterLimit;
+	exports.filterSeries = filterSeries;
+	exports.forever = forever;
+	exports.groupBy = groupBy;
+	exports.groupByLimit = groupByLimit;
+	exports.groupBySeries = groupBySeries;
+	exports.log = log;
+	exports.map = map;
+	exports.mapLimit = mapLimit;
+	exports.mapSeries = mapSeries;
+	exports.mapValues = mapValues;
+	exports.mapValuesLimit = mapValuesLimit;
+	exports.mapValuesSeries = mapValuesSeries;
+	exports.memoize = memoize;
+	exports.nextTick = nextTick;
+	exports.parallel = parallelLimit;
+	exports.parallelLimit = parallelLimit$1;
+	exports.priorityQueue = priorityQueue;
+	exports.queue = queue$1;
+	exports.race = race;
+	exports.reduce = reduce;
+	exports.reduceRight = reduceRight;
+	exports.reflect = reflect;
+	exports.reflectAll = reflectAll;
+	exports.reject = reject;
+	exports.rejectLimit = rejectLimit;
+	exports.rejectSeries = rejectSeries;
+	exports.retry = retry;
+	exports.retryable = retryable;
+	exports.seq = seq;
+	exports.series = series;
+	exports.setImmediate = setImmediate$1;
+	exports.some = some;
+	exports.someLimit = someLimit;
+	exports.someSeries = someSeries;
+	exports.sortBy = sortBy;
+	exports.timeout = timeout;
+	exports.times = times;
+	exports.timesLimit = timeLimit;
+	exports.timesSeries = timesSeries;
+	exports.transform = transform;
+	exports.tryEach = tryEach;
+	exports.unmemoize = unmemoize;
+	exports.until = until;
+	exports.waterfall = waterfall;
+	exports.whilst = whilst;
+	exports.all = every;
+	exports.allLimit = everyLimit;
+	exports.allSeries = everySeries;
+	exports.any = some;
+	exports.anyLimit = someLimit;
+	exports.anySeries = someSeries;
+	exports.find = detect;
+	exports.findLimit = detectLimit;
+	exports.findSeries = detectSeries;
+	exports.forEach = eachLimit;
+	exports.forEachSeries = eachSeries;
+	exports.forEachLimit = eachLimit$1;
+	exports.forEachOf = eachOf;
+	exports.forEachOfSeries = eachOfSeries;
+	exports.forEachOfLimit = eachOfLimit;
+	exports.inject = reduce;
+	exports.foldl = reduce;
+	exports.foldr = reduceRight;
+	exports.select = filter;
+	exports.selectLimit = filterLimit;
+	exports.selectSeries = filterSeries;
+	exports.wrapSync = asyncify;
+
+	Object.defineProperty(exports, '__esModule', { value: true });
+
+	})));
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27).setImmediate, __webpack_require__(6), (function() { return this; }()), __webpack_require__(21)(module)))
+
+/***/ },
+/* 27 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(setImmediate, clearImmediate) {var nextTick = __webpack_require__(6).nextTick;
+	var apply = Function.prototype.apply;
+	var slice = Array.prototype.slice;
+	var immediateIds = {};
+	var nextImmediateId = 0;
+
+	// DOM APIs, for completeness
+
+	exports.setTimeout = function() {
+	  return new Timeout(apply.call(setTimeout, window, arguments), clearTimeout);
+	};
+	exports.setInterval = function() {
+	  return new Timeout(apply.call(setInterval, window, arguments), clearInterval);
+	};
+	exports.clearTimeout =
+	exports.clearInterval = function(timeout) { timeout.close(); };
+
+	function Timeout(id, clearFn) {
+	  this._id = id;
+	  this._clearFn = clearFn;
+	}
+	Timeout.prototype.unref = Timeout.prototype.ref = function() {};
+	Timeout.prototype.close = function() {
+	  this._clearFn.call(window, this._id);
+	};
+
+	// Does not start the time, just sets up the members needed.
+	exports.enroll = function(item, msecs) {
+	  clearTimeout(item._idleTimeoutId);
+	  item._idleTimeout = msecs;
+	};
+
+	exports.unenroll = function(item) {
+	  clearTimeout(item._idleTimeoutId);
+	  item._idleTimeout = -1;
+	};
+
+	exports._unrefActive = exports.active = function(item) {
+	  clearTimeout(item._idleTimeoutId);
+
+	  var msecs = item._idleTimeout;
+	  if (msecs >= 0) {
+	    item._idleTimeoutId = setTimeout(function onTimeout() {
+	      if (item._onTimeout)
+	        item._onTimeout();
+	    }, msecs);
+	  }
+	};
+
+	// That's not how node.js implements it but the exposed api is the same.
+	exports.setImmediate = typeof setImmediate === "function" ? setImmediate : function(fn) {
+	  var id = nextImmediateId++;
+	  var args = arguments.length < 2 ? false : slice.call(arguments, 1);
+
+	  immediateIds[id] = true;
+
+	  nextTick(function onNextTick() {
+	    if (immediateIds[id]) {
+	      // fn.call() is faster so we optimize for the common use-case
+	      // @see http://jsperf.com/call-apply-segu
+	      if (args) {
+	        fn.apply(null, args);
+	      } else {
+	        fn.call(null);
+	      }
+	      // Prevent ids from leaking
+	      exports.clearImmediate(id);
+	    }
+	  });
+
+	  return id;
+	};
+
+	exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate : function(id) {
+	  delete immediateIds[id];
+	};
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27).setImmediate, __webpack_require__(27).clearImmediate))
+
+/***/ },
+/* 28 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(29);
+
+/***/ },
+/* 29 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/**
+	 * @projectName fast-csv
+	 * @github https://github.com/C2FO/fast-csv
+	 * @includeDoc [Change Log] ../History.md
+	 * @header [../README.md]
+	 */
+
+	var fs = __webpack_require__(12),
+	    parser = __webpack_require__(30),
+	    formatter = __webpack_require__(68);
+
+	function csv() {
+	    return parser.apply(void 0, arguments);
+	}
+
+	csv.parse = csv;
+	csv.fromString = parser.fromString;
+	csv.fromPath = parser.fromPath;
+	csv.fromStream = parser.fromStream;
+	csv.format = formatter;
+	csv.write = formatter.write;
+	csv.writeToStream = formatter.writeToStream;
+	csv.writeToString = formatter.writeToString;
+	csv.writeToBuffer = formatter.writeToBuffer;
+	csv.writeToPath = formatter.writeToPath;
+	csv.createWriteStream = formatter.createWriteStream;
+	csv.createReadStream = formatter.createWriteStream;
+
+	module.exports = csv;
+
+/***/ },
+/* 30 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {var extended = __webpack_require__(31),
+	    out = process.stdout,
+	    stream = __webpack_require__(44),
+	    fs = __webpack_require__(12),
+	    ParserStream = __webpack_require__(61);
+
+
+	function parse(options) {
+	    return new ParserStream(options);
+	}
+
+	function fromStream(stream, options) {
+	    return stream.pipe(new ParserStream(options));
+	}
+
+	function fromPath(location, options) {
+	    return fs.createReadStream(location).pipe(new ParserStream(options));
+	}
+
+	function fromString(string, options) {
+	    var rs = new stream.Readable();
+	    rs.push(string);
+	    rs.push(null);
+	    return rs.pipe(new ParserStream(options));
+	}
+
+	parse.fromStream = fromStream;
+	parse.fromPath = fromPath;
+	parse.fromString = fromString;
+	module.exports = parse;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 31 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(setImmediate) {var is = __webpack_require__(32),
+	    hasOwn = Object.prototype.hasOwnProperty;
+	module.exports = __webpack_require__(33)()
+	    .register(is)
+	    .register(__webpack_require__(38))
+	    .register(__webpack_require__(41))
+	    .register("LINE_BREAK", __webpack_require__(43).EOL)
+	    .register("asyncEach", function (arr, iter, cb) {
+
+
+	        (function asyncIterator(i, l, rows, cb) {
+	            if (++i < l) {
+	                iter(rows[i], function (err) {
+	                    if (err) {
+	                        cb(err);
+	                    } else {
+	                        if ((i % 100) === 0) {
+	                            //dont overflow the stack
+	                            setImmediate(function () {
+	                                asyncIterator(i, l, rows, cb);
+	                            });
+	                        } else {
+	                            asyncIterator(i, l, rows, cb);
+	                        }
+	                    }
+	                });
+	            } else {
+	                //get out of stack
+	                cb(null, arr);
+	            }
+	        }(-1, arr.length, arr, cb));
+	    })
+	    .register("spreadArgs", function spreadArgs(f, args, scope) {
+	        var ret;
+	        switch ((args || []).length) {
+	            case 0:
+	                ret = f.call(scope);
+	                break;
+	            case 1:
+	                ret = f.call(scope, args[0]);
+	                break;
+	            case 2:
+	                ret = f.call(scope, args[0], args[1]);
+	                break;
+	            case 3:
+	                ret = f.call(scope, args[0], args[1], args[2]);
+	                break;
+	            default:
+	                ret = f.apply(scope, args);
+	        }
+	        return ret;
+	    })
+	    .register("keys", function (obj) {
+	        var ret = [];
+	        for (var i in obj) {
+	            if (hasOwn.call(obj, i)) {
+	                ret.push(i);
+	            }
+	        }
+	        return ret;
+	    });
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27).setImmediate))
+
+/***/ },
+/* 32 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(Buffer) {(function () {
+	    "use strict";
+
+	    function defineIsa(extended) {
+
+	        var pSlice = Array.prototype.slice;
+
+	        var hasOwn = Object.prototype.hasOwnProperty;
+	        var toStr = Object.prototype.toString;
+
+	        function argsToArray(args, slice) {
+	            var i = -1, j = 0, l = args.length, ret = [];
+	            slice = slice || 0;
+	            i += slice;
+	            while (++i < l) {
+	                ret[j++] = args[i];
+	            }
+	            return ret;
+	        }
+
+	        function keys(obj) {
+	            var ret = [];
+	            for (var i in obj) {
+	                if (hasOwn.call(obj, i)) {
+	                    ret.push(i);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        //taken from node js assert.js
+	        //https://github.com/joyent/node/blob/master/lib/assert.js
+	        function deepEqual(actual, expected) {
+	            // 7.1. All identical values are equivalent, as determined by ===.
+	            if (actual === expected) {
+	                return true;
+
+	            } else if (typeof Buffer !== "undefined" && Buffer.isBuffer(actual) && Buffer.isBuffer(expected)) {
+	                if (actual.length !== expected.length) {
+	                    return false;
+	                }
+	                for (var i = 0; i < actual.length; i++) {
+	                    if (actual[i] !== expected[i]) {
+	                        return false;
+	                    }
+	                }
+	                return true;
+
+	                // 7.2. If the expected value is a Date object, the actual value is
+	                // equivalent if it is also a Date object that refers to the same time.
+	            } else if (isDate(actual) && isDate(expected)) {
+	                return actual.getTime() === expected.getTime();
+
+	                // 7.3 If the expected value is a RegExp object, the actual value is
+	                // equivalent if it is also a RegExp object with the same source and
+	                // properties (`global`, `multiline`, `lastIndex`, `ignoreCase`).
+	            } else if (isRegExp(actual) && isRegExp(expected)) {
+	                return actual.source === expected.source &&
+	                    actual.global === expected.global &&
+	                    actual.multiline === expected.multiline &&
+	                    actual.lastIndex === expected.lastIndex &&
+	                    actual.ignoreCase === expected.ignoreCase;
+
+	                // 7.4. Other pairs that do not both pass typeof value == 'object',
+	                // equivalence is determined by ==.
+	            } else if (isString(actual) && isString(expected) && actual !== expected) {
+	                return false;
+	            } else if (typeof actual !== 'object' && typeof expected !== 'object') {
+	                return actual === expected;
+
+	                // 7.5 For all other Object pairs, including Array objects, equivalence is
+	                // determined by having the same number of owned properties (as verified
+	                // with Object.prototype.hasOwnProperty.call), the same set of keys
+	                // (although not necessarily the same order), equivalent values for every
+	                // corresponding key, and an identical 'prototype' property. Note: this
+	                // accounts for both named and indexed properties on Arrays.
+	            } else {
+	                return objEquiv(actual, expected);
+	            }
+	        }
+
+
+	        function objEquiv(a, b) {
+	            var key;
+	            if (isUndefinedOrNull(a) || isUndefinedOrNull(b)) {
+	                return false;
+	            }
+	            // an identical 'prototype' property.
+	            if (a.prototype !== b.prototype) {
+	                return false;
+	            }
+	            //~~~I've managed to break Object.keys through screwy arguments passing.
+	            //   Converting to array solves the problem.
+	            if (isArguments(a)) {
+	                if (!isArguments(b)) {
+	                    return false;
+	                }
+	                a = pSlice.call(a);
+	                b = pSlice.call(b);
+	                return deepEqual(a, b);
+	            }
+	            try {
+	                var ka = keys(a),
+	                    kb = keys(b),
+	                    i;
+	                // having the same number of owned properties (keys incorporates
+	                // hasOwnProperty)
+	                if (ka.length !== kb.length) {
+	                    return false;
+	                }
+	                //the same set of keys (although not necessarily the same order),
+	                ka.sort();
+	                kb.sort();
+	                //~~~cheap key test
+	                for (i = ka.length - 1; i >= 0; i--) {
+	                    if (ka[i] !== kb[i]) {
+	                        return false;
+	                    }
+	                }
+	                //equivalent values for every corresponding key, and
+	                //~~~possibly expensive deep test
+	                for (i = ka.length - 1; i >= 0; i--) {
+	                    key = ka[i];
+	                    if (!deepEqual(a[key], b[key])) {
+	                        return false;
+	                    }
+	                }
+	            } catch (e) {//happens when one is a string literal and the other isn't
+	                return false;
+	            }
+	            return true;
+	        }
+
+
+	        var isFunction = function (obj) {
+	            return toStr.call(obj) === '[object Function]';
+	        };
+
+	        //ie hack
+	        if ("undefined" !== typeof window && !isFunction(window.alert)) {
+	            (function (alert) {
+	                isFunction = function (obj) {
+	                    return toStr.call(obj) === '[object Function]' || obj === alert;
+	                };
+	            }(window.alert));
+	        }
+
+	        function isObject(obj) {
+	            var undef;
+	            return obj !== null && typeof obj === "object";
+	        }
+
+	        function isHash(obj) {
+	            var ret = isObject(obj);
+	            return ret && obj.constructor === Object && !obj.nodeType && !obj.setInterval;
+	        }
+
+	        function isEmpty(object) {
+	            if (isArguments(object)) {
+	                return object.length === 0;
+	            } else if (isObject(object)) {
+	                return keys(object).length === 0;
+	            } else if (isString(object) || isArray(object)) {
+	                return object.length === 0;
+	            }
+	            return true;
+	        }
+
+	        function isBoolean(obj) {
+	            return obj === true || obj === false || toStr.call(obj) === "[object Boolean]";
+	        }
+
+	        function isUndefined(obj) {
+	            return typeof obj === 'undefined';
+	        }
+
+	        function isDefined(obj) {
+	            return !isUndefined(obj);
+	        }
+
+	        function isUndefinedOrNull(obj) {
+	            return isUndefined(obj) || isNull(obj);
+	        }
+
+	        function isNull(obj) {
+	            return obj === null;
+	        }
+
+
+	        var isArguments = function _isArguments(object) {
+	            return toStr.call(object) === '[object Arguments]';
+	        };
+
+	        if (!isArguments(arguments)) {
+	            isArguments = function _isArguments(obj) {
+	                return !!(obj && hasOwn.call(obj, "callee"));
+	            };
+	        }
+
+
+	        function isInstanceOf(obj, clazz) {
+	            if (isFunction(clazz)) {
+	                return obj instanceof clazz;
+	            } else {
+	                return false;
+	            }
+	        }
+
+	        function isRegExp(obj) {
+	            return toStr.call(obj) === '[object RegExp]';
+	        }
+
+	        var isArray = Array.isArray || function isArray(obj) {
+	            return toStr.call(obj) === "[object Array]";
+	        };
+
+	        function isDate(obj) {
+	            return toStr.call(obj) === '[object Date]';
+	        }
+
+	        function isString(obj) {
+	            return toStr.call(obj) === '[object String]';
+	        }
+
+	        function isNumber(obj) {
+	            return toStr.call(obj) === '[object Number]';
+	        }
+
+	        function isTrue(obj) {
+	            return obj === true;
+	        }
+
+	        function isFalse(obj) {
+	            return obj === false;
+	        }
+
+	        function isNotNull(obj) {
+	            return !isNull(obj);
+	        }
+
+	        function isEq(obj, obj2) {
+	            /*jshint eqeqeq:false*/
+	            return obj == obj2;
+	        }
+
+	        function isNeq(obj, obj2) {
+	            /*jshint eqeqeq:false*/
+	            return obj != obj2;
+	        }
+
+	        function isSeq(obj, obj2) {
+	            return obj === obj2;
+	        }
+
+	        function isSneq(obj, obj2) {
+	            return obj !== obj2;
+	        }
+
+	        function isIn(obj, arr) {
+	            if ((isArray(arr) && Array.prototype.indexOf) || isString(arr)) {
+	                return arr.indexOf(obj) > -1;
+	            } else if (isArray(arr)) {
+	                for (var i = 0, l = arr.length; i < l; i++) {
+	                    if (isEq(obj, arr[i])) {
+	                        return true;
+	                    }
+	                }
+	            }
+	            return false;
+	        }
+
+	        function isNotIn(obj, arr) {
+	            return !isIn(obj, arr);
+	        }
+
+	        function isLt(obj, obj2) {
+	            return obj < obj2;
+	        }
+
+	        function isLte(obj, obj2) {
+	            return obj <= obj2;
+	        }
+
+	        function isGt(obj, obj2) {
+	            return obj > obj2;
+	        }
+
+	        function isGte(obj, obj2) {
+	            return obj >= obj2;
+	        }
+
+	        function isLike(obj, reg) {
+	            if (isString(reg)) {
+	                return ("" + obj).match(reg) !== null;
+	            } else if (isRegExp(reg)) {
+	                return reg.test(obj);
+	            }
+	            return false;
+	        }
+
+	        function isNotLike(obj, reg) {
+	            return !isLike(obj, reg);
+	        }
+
+	        function contains(arr, obj) {
+	            return isIn(obj, arr);
+	        }
+
+	        function notContains(arr, obj) {
+	            return !isIn(obj, arr);
+	        }
+
+	        function containsAt(arr, obj, index) {
+	            if (isArray(arr) && arr.length > index) {
+	                return isEq(arr[index], obj);
+	            }
+	            return false;
+	        }
+
+	        function notContainsAt(arr, obj, index) {
+	            if (isArray(arr)) {
+	                return !isEq(arr[index], obj);
+	            }
+	            return false;
+	        }
+
+	        function has(obj, prop) {
+	            return hasOwn.call(obj, prop);
+	        }
+
+	        function notHas(obj, prop) {
+	            return !has(obj, prop);
+	        }
+
+	        function length(obj, l) {
+	            if (has(obj, "length")) {
+	                return obj.length === l;
+	            }
+	            return false;
+	        }
+
+	        function notLength(obj, l) {
+	            if (has(obj, "length")) {
+	                return obj.length !== l;
+	            }
+	            return false;
+	        }
+
+	        var isa = {
+	            isFunction: isFunction,
+	            isObject: isObject,
+	            isEmpty: isEmpty,
+	            isHash: isHash,
+	            isNumber: isNumber,
+	            isString: isString,
+	            isDate: isDate,
+	            isArray: isArray,
+	            isBoolean: isBoolean,
+	            isUndefined: isUndefined,
+	            isDefined: isDefined,
+	            isUndefinedOrNull: isUndefinedOrNull,
+	            isNull: isNull,
+	            isArguments: isArguments,
+	            instanceOf: isInstanceOf,
+	            isRegExp: isRegExp,
+	            deepEqual: deepEqual,
+	            isTrue: isTrue,
+	            isFalse: isFalse,
+	            isNotNull: isNotNull,
+	            isEq: isEq,
+	            isNeq: isNeq,
+	            isSeq: isSeq,
+	            isSneq: isSneq,
+	            isIn: isIn,
+	            isNotIn: isNotIn,
+	            isLt: isLt,
+	            isLte: isLte,
+	            isGt: isGt,
+	            isGte: isGte,
+	            isLike: isLike,
+	            isNotLike: isNotLike,
+	            contains: contains,
+	            notContains: notContains,
+	            has: has,
+	            notHas: notHas,
+	            isLength: length,
+	            isNotLength: notLength,
+	            containsAt: containsAt,
+	            notContainsAt: notContainsAt
+	        };
+
+	        var tester = {
+	            constructor: function () {
+	                this._testers = [];
+	            },
+
+	            noWrap: {
+	                tester: function () {
+	                    var testers = this._testers;
+	                    return function tester(value) {
+	                        var isa = false;
+	                        for (var i = 0, l = testers.length; i < l && !isa; i++) {
+	                            isa = testers[i](value);
+	                        }
+	                        return isa;
+	                    };
+	                }
+	            }
+	        };
+
+	        var switcher = {
+	            constructor: function () {
+	                this._cases = [];
+	                this.__default = null;
+	            },
+
+	            def: function (val, fn) {
+	                this.__default = fn;
+	            },
+
+	            noWrap: {
+	                switcher: function () {
+	                    var testers = this._cases, __default = this.__default;
+	                    return function tester() {
+	                        var handled = false, args = argsToArray(arguments), caseRet;
+	                        for (var i = 0, l = testers.length; i < l && !handled; i++) {
+	                            caseRet = testers[i](args);
+	                            if (caseRet.length > 1) {
+	                                if (caseRet[1] || caseRet[0]) {
+	                                    return caseRet[1];
+	                                }
+	                            }
+	                        }
+	                        if (!handled && __default) {
+	                            return  __default.apply(this, args);
+	                        }
+	                    };
+	                }
+	            }
+	        };
+
+	        function addToTester(func) {
+	            tester[func] = function isaTester() {
+	                this._testers.push(isa[func]);
+	            };
+	        }
+
+	        function addToSwitcher(func) {
+	            switcher[func] = function isaTester() {
+	                var args = argsToArray(arguments, 1), isFunc = isa[func], handler, doBreak = true;
+	                if (args.length <= isFunc.length - 1) {
+	                    throw new TypeError("A handler must be defined when calling using switch");
+	                } else {
+	                    handler = args.pop();
+	                    if (isBoolean(handler)) {
+	                        doBreak = handler;
+	                        handler = args.pop();
+	                    }
+	                }
+	                if (!isFunction(handler)) {
+	                    throw new TypeError("handler must be defined");
+	                }
+	                this._cases.push(function (testArgs) {
+	                    if (isFunc.apply(isa, testArgs.concat(args))) {
+	                        return [doBreak, handler.apply(this, testArgs)];
+	                    }
+	                    return [false];
+	                });
+	            };
+	        }
+
+	        for (var i in isa) {
+	            if (hasOwn.call(isa, i)) {
+	                addToSwitcher(i);
+	                addToTester(i);
+	            }
+	        }
+
+	        var is = extended.define(isa).expose(isa);
+	        is.tester = extended.define(tester);
+	        is.switcher = extended.define(switcher);
+	        return is;
+
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineIsa(__webpack_require__(33));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended"], function (extended) {
+	            return defineIsa(extended);
+	        });
+	    } else {
+	        this.isExtended = defineIsa(this.extended);
+	    }
+
+	}).call(this);
+
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
+
+/***/ },
+/* 33 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+	    /*global extender is, dateExtended*/
+
+	    function defineExtended(extender) {
+
+
+	        var merge = (function merger() {
+	            function _merge(target, source) {
+	                var name, s;
+	                for (name in source) {
+	                    if (source.hasOwnProperty(name)) {
+	                        s = source[name];
+	                        if (!(name in target) || (target[name] !== s)) {
+	                            target[name] = s;
+	                        }
+	                    }
+	                }
+	                return target;
+	            }
+
+	            return function merge(obj) {
+	                if (!obj) {
+	                    obj = {};
+	                }
+	                for (var i = 1, l = arguments.length; i < l; i++) {
+	                    _merge(obj, arguments[i]);
+	                }
+	                return obj; // Object
+	            };
+	        }());
+
+	        function getExtended() {
+
+	            var loaded = {};
+
+
+	            //getInitial instance;
+	            var extended = extender.define();
+	            extended.expose({
+	                register: function register(alias, extendWith) {
+	                    if (!extendWith) {
+	                        extendWith = alias;
+	                        alias = null;
+	                    }
+	                    var type = typeof extendWith;
+	                    if (alias) {
+	                        extended[alias] = extendWith;
+	                    } else if (extendWith && type === "function") {
+	                        extended.extend(extendWith);
+	                    } else if (type === "object") {
+	                        extended.expose(extendWith);
+	                    } else {
+	                        throw new TypeError("extended.register must be called with an extender function");
+	                    }
+	                    return extended;
+	                },
+
+	                define: function () {
+	                    return extender.define.apply(extender, arguments);
+	                }
+	            });
+
+	            return extended;
+	        }
+
+	        function extended() {
+	            return getExtended();
+	        }
+
+	        extended.define = function define() {
+	            return extender.define.apply(extender, arguments);
+	        };
+
+	        return extended;
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineExtended(__webpack_require__(34));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extender"], function (extender) {
+	            return defineExtended(extender);
+	        });
+	    } else {
+	        this.extended = defineExtended(this.extender);
+	    }
+
+	}).call(this);
+
+
+
+
+
+
+
+
+/***/ },
+/* 34 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(35);
+
+/***/ },
+/* 35 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    /*jshint strict:false*/
+
+
+	    /**
+	     *
+	     * @projectName extender
+	     * @github http://github.com/doug-martin/extender
+	     * @header
+	     * [![build status](https://secure.travis-ci.org/doug-martin/extender.png)](http://travis-ci.org/doug-martin/extender)
+	     * # Extender
+	     *
+	     * `extender` is a library that helps in making chainable APIs, by creating a function that accepts different values and returns an object decorated with functions based on the type.
+	     *
+	     * ## Why Is Extender Different?
+	     *
+	     * Extender is different than normal chaining because is does more than return `this`. It decorates your values in a type safe manner.
+	     *
+	     * For example if you return an array from a string based method then the returned value will be decorated with array methods and not the string methods. This allow you as the developer to focus on your API and not worrying about how to properly build and connect your API.
+	     *
+	     *
+	     * ## Installation
+	     *
+	     * ```
+	     * npm install extender
+	     * ```
+	     *
+	     * Or [download the source](https://raw.github.com/doug-martin/extender/master/extender.js) ([minified](https://raw.github.com/doug-martin/extender/master/extender-min.js))
+	     *
+	     * **Note** `extender` depends on [`declare.js`](http://doug-martin.github.com/declare.js/).
+	     *
+	     * ### Requirejs
+	     *
+	     * To use with requirejs place the `extend` source in the root scripts directory
+	     *
+	     * ```javascript
+	     *
+	     * define(["extender"], function(extender){
+	     * });
+	     *
+	     * ```
+	     *
+	     *
+	     * ## Usage
+	     *
+	     * **`extender.define(tester, decorations)`**
+	     *
+	     * To create your own extender call the `extender.define` function.
+	     *
+	     * This function accepts an optional tester which is used to determine a value should be decorated with the specified `decorations`
+	     *
+	     * ```javascript
+	     * function isString(obj) {
+	     *     return !isUndefinedOrNull(obj) && (typeof obj === "string" || obj instanceof String);
+	     * }
+	     *
+	     *
+	     * var myExtender = extender.define(isString, {
+	     *		multiply: function (str, times) {
+	     *			var ret = str;
+	     *			for (var i = 1; i < times; i++) {
+	     *				ret += str;
+	     *			}
+	     *			return ret;
+	     *		},
+	     *		toArray: function (str, delim) {
+	     *			delim = delim || "";
+	     *			return str.split(delim);
+	     *		}
+	     *	});
+	     *
+	     * myExtender("hello").multiply(2).value(); //hellohello
+	     *
+	     * ```
+	     *
+	     * If you do not specify a tester function and just pass in an object of `functions` then all values passed in will be decorated with methods.
+	     *
+	     * ```javascript
+	     *
+	     * function isUndefined(obj) {
+	     *     var undef;
+	     *     return obj === undef;
+	     * }
+	     *
+	     * function isUndefinedOrNull(obj) {
+	     *	var undef;
+	     *     return obj === undef || obj === null;
+	     * }
+	     *
+	     * function isArray(obj) {
+	     *     return Object.prototype.toString.call(obj) === "[object Array]";
+	     * }
+	     *
+	     * function isBoolean(obj) {
+	     *     var undef, type = typeof obj;
+	     *     return !isUndefinedOrNull(obj) && type === "boolean" || type === "Boolean";
+	     * }
+	     *
+	     * function isString(obj) {
+	     *     return !isUndefinedOrNull(obj) && (typeof obj === "string" || obj instanceof String);
+	     * }
+	     *
+	     * var myExtender = extender.define({
+	     *	isUndefined : isUndefined,
+	     *	isUndefinedOrNull : isUndefinedOrNull,
+	     *	isArray : isArray,
+	     *	isBoolean : isBoolean,
+	     *	isString : isString
+	     * });
+	     *
+	     * ```
+	     *
+	     * To use
+	     *
+	     * ```
+	     * var undef;
+	     * myExtender("hello").isUndefined().value(); //false
+	     * myExtender(undef).isUndefined().value(); //true
+	     * ```
+	     *
+	     * You can also chain extenders so that they accept multiple types and decorates accordingly.
+	     *
+	     * ```javascript
+	     * myExtender
+	     *     .define(isArray, {
+	     *		pluck: function (arr, m) {
+	     *			var ret = [];
+	     *			for (var i = 0, l = arr.length; i < l; i++) {
+	     *				ret.push(arr[i][m]);
+	     *			}
+	     *			return ret;
+	     *		}
+	     *	})
+	     *     .define(isBoolean, {
+	     *		invert: function (val) {
+	     *			return !val;
+	     *		}
+	     *	});
+	     *
+	     * myExtender([{a: "a"},{a: "b"},{a: "c"}]).pluck("a").value(); //["a", "b", "c"]
+	     * myExtender("I love javascript!").toArray(/\s+/).pluck("0"); //["I", "l", "j"]
+	     *
+	     * ```
+	     *
+	     * Notice that we reuse the same extender as defined above.
+	     *
+	     * **Return Values**
+	     *
+	     * When creating an extender if you return a value from one of the decoration functions then that value will also be decorated. If you do not return any values then the extender will be returned.
+	     *
+	     * **Default decoration methods**
+	     *
+	     * By default every value passed into an extender is decorated with the following methods.
+	     *
+	     * * `value` : The value this extender represents.
+	     * * `eq(otherValue)` : Tests strict equality of the currently represented value to the `otherValue`
+	     * * `neq(oterValue)` : Tests strict inequality of the currently represented value.
+	     * * `print` : logs the current value to the console.
+	     *
+	     * **Extender initialization**
+	     *
+	     * When creating an extender you can also specify a constructor which will be invoked with the current value.
+	     *
+	     * ```javascript
+	     * myExtender.define(isString, {
+	     *	constructor : function(val){
+	     *     //set our value to the string trimmed
+	     *		this._value = val.trimRight().trimLeft();
+	     *	}
+	     * });
+	     * ```
+	     *
+	     * **`noWrap`**
+	     *
+	     * `extender` also allows you to specify methods that should not have the value wrapped providing a cleaner exit function other than `value()`.
+	     *
+	     * For example suppose you have an API that allows you to build a validator, rather than forcing the user to invoke the `value` method you could add a method called `validator` which makes more syntactic sense.
+	     *
+	     * ```
+	     *
+	     * var myValidator = extender.define({
+	     *     //chainable validation methods
+	     *     //...
+	     *     //end chainable validation methods
+	     *
+	     *     noWrap : {
+	     *         validator : function(){
+	     *             //return your validator
+	     *         }
+	     *     }
+	     * });
+	     *
+	     * myValidator().isNotNull().isEmailAddress().validator(); //now you dont need to call .value()
+	     *
+	     *
+	     * ```
+	     * **`extender.extend(extendr)`**
+	     *
+	     * You may also compose extenders through the use of `extender.extend(extender)`, which will return an entirely new extender that is the composition of extenders.
+	     *
+	     * Suppose you have the following two extenders.
+	     *
+	     * ```javascript
+	     * var myExtender = extender
+	     *        .define({
+	     *            isFunction: is.function,
+	     *            isNumber: is.number,
+	     *            isString: is.string,
+	     *            isDate: is.date,
+	     *            isArray: is.array,
+	     *            isBoolean: is.boolean,
+	     *            isUndefined: is.undefined,
+	     *            isDefined: is.defined,
+	     *            isUndefinedOrNull: is.undefinedOrNull,
+	     *            isNull: is.null,
+	     *            isArguments: is.arguments,
+	     *            isInstanceOf: is.instanceOf,
+	     *            isRegExp: is.regExp
+	     *        });
+	     * var myExtender2 = extender.define(is.array, {
+	     *     pluck: function (arr, m) {
+	     *         var ret = [];
+	     *         for (var i = 0, l = arr.length; i < l; i++) {
+	     *             ret.push(arr[i][m]);
+	     *         }
+	     *         return ret;
+	     *     },
+	     *
+	     *     noWrap: {
+	     *         pluckPlain: function (arr, m) {
+	     *             var ret = [];
+	     *             for (var i = 0, l = arr.length; i < l; i++) {
+	     *                 ret.push(arr[i][m]);
+	     *             }
+	     *             return ret;
+	     *         }
+	     *     }
+	     * });
+	     *
+	     *
+	     * ```
+	     *
+	     * And you do not want to alter either of them but instead what to create a third that is the union of the two.
+	     *
+	     *
+	     * ```javascript
+	     * var composed = extender.extend(myExtender).extend(myExtender2);
+	     * ```
+	     * So now you can use the new extender with the joined functionality if `myExtender` and `myExtender2`.
+	     *
+	     * ```javascript
+	     * var extended = composed([
+	     *      {a: "a"},
+	     *      {a: "b"},
+	     *      {a: "c"}
+	     * ]);
+	     * extended.isArray().value(); //true
+	     * extended.pluck("a").value(); // ["a", "b", "c"]);
+	     *
+	     * ```
+	     *
+	     * **Note** `myExtender` and `myExtender2` will **NOT** be altered.
+	     *
+	     * **`extender.expose(methods)`**
+	     *
+	     * The `expose` method allows you to add methods to your extender that are not wrapped or automatically chained by exposing them on the extender directly.
+	     *
+	     * ```
+	     * var isMethods = {
+	     *      isFunction: is.function,
+	     *      isNumber: is.number,
+	     *      isString: is.string,
+	     *      isDate: is.date,
+	     *      isArray: is.array,
+	     *      isBoolean: is.boolean,
+	     *      isUndefined: is.undefined,
+	     *      isDefined: is.defined,
+	     *      isUndefinedOrNull: is.undefinedOrNull,
+	     *      isNull: is.null,
+	     *      isArguments: is.arguments,
+	     *      isInstanceOf: is.instanceOf,
+	     *      isRegExp: is.regExp
+	     * };
+	     *
+	     * var myExtender = extender.define(isMethods).expose(isMethods);
+	     *
+	     * myExtender.isArray([]); //true
+	     * myExtender([]).isArray([]).value(); //true
+	     *
+	     * ```
+	     *
+	     *
+	     * **Using `instanceof`**
+	     *
+	     * When using extenders you can test if a value is an `instanceof` of an extender by using the instanceof operator.
+	     *
+	     * ```javascript
+	     * var str = myExtender("hello");
+	     *
+	     * str instanceof myExtender; //true
+	     * ```
+	     *
+	     * ## Examples
+	     *
+	     * To see more examples click [here](https://github.com/doug-martin/extender/tree/master/examples)
+	     */
+	    function defineExtender(declare) {
+
+
+	        var slice = Array.prototype.slice, undef;
+
+	        function indexOf(arr, item) {
+	            if (arr && arr.length) {
+	                for (var i = 0, l = arr.length; i < l; i++) {
+	                    if (arr[i] === item) {
+	                        return i;
+	                    }
+	                }
+	            }
+	            return -1;
+	        }
+
+	        function isArray(obj) {
+	            return Object.prototype.toString.call(obj) === "[object Array]";
+	        }
+
+	        var merge = (function merger() {
+	            function _merge(target, source, exclude) {
+	                var name, s;
+	                for (name in source) {
+	                    if (source.hasOwnProperty(name) && indexOf(exclude, name) === -1) {
+	                        s = source[name];
+	                        if (!(name in target) || (target[name] !== s)) {
+	                            target[name] = s;
+	                        }
+	                    }
+	                }
+	                return target;
+	            }
+
+	            return function merge(obj) {
+	                if (!obj) {
+	                    obj = {};
+	                }
+	                var l = arguments.length;
+	                var exclude = arguments[arguments.length - 1];
+	                if (isArray(exclude)) {
+	                    l--;
+	                } else {
+	                    exclude = [];
+	                }
+	                for (var i = 1; i < l; i++) {
+	                    _merge(obj, arguments[i], exclude);
+	                }
+	                return obj; // Object
+	            };
+	        }());
+
+
+	        function extender(supers) {
+	            supers = supers || [];
+	            var Base = declare({
+	                instance: {
+	                    constructor: function (value) {
+	                        this._value = value;
+	                    },
+
+	                    value: function () {
+	                        return this._value;
+	                    },
+
+	                    eq: function eq(val) {
+	                        return this["__extender__"](this._value === val);
+	                    },
+
+	                    neq: function neq(other) {
+	                        return this["__extender__"](this._value !== other);
+	                    },
+	                    print: function () {
+	                        console.log(this._value);
+	                        return this;
+	                    }
+	                }
+	            }), defined = [];
+
+	            function addMethod(proto, name, func) {
+	                if ("function" !== typeof func) {
+	                    throw new TypeError("when extending type you must provide a function");
+	                }
+	                var extendedMethod;
+	                if (name === "constructor") {
+	                    extendedMethod = function () {
+	                        this._super(arguments);
+	                        func.apply(this, arguments);
+	                    };
+	                } else {
+	                    extendedMethod = function extendedMethod() {
+	                        var args = slice.call(arguments);
+	                        args.unshift(this._value);
+	                        var ret = func.apply(this, args);
+	                        return ret !== undef ? this["__extender__"](ret) : this;
+	                    };
+	                }
+	                proto[name] = extendedMethod;
+	            }
+
+	            function addNoWrapMethod(proto, name, func) {
+	                if ("function" !== typeof func) {
+	                    throw new TypeError("when extending type you must provide a function");
+	                }
+	                var extendedMethod;
+	                if (name === "constructor") {
+	                    extendedMethod = function () {
+	                        this._super(arguments);
+	                        func.apply(this, arguments);
+	                    };
+	                } else {
+	                    extendedMethod = function extendedMethod() {
+	                        var args = slice.call(arguments);
+	                        args.unshift(this._value);
+	                        return func.apply(this, args);
+	                    };
+	                }
+	                proto[name] = extendedMethod;
+	            }
+
+	            function decorateProto(proto, decoration, nowrap) {
+	                for (var i in decoration) {
+	                    if (decoration.hasOwnProperty(i)) {
+	                        if (i !== "getters" && i !== "setters") {
+	                            if (i === "noWrap") {
+	                                decorateProto(proto, decoration[i], true);
+	                            } else if (nowrap) {
+	                                addNoWrapMethod(proto, i, decoration[i]);
+	                            } else {
+	                                addMethod(proto, i, decoration[i]);
+	                            }
+	                        } else {
+	                            proto[i] = decoration[i];
+	                        }
+	                    }
+	                }
+	            }
+
+	            function _extender(obj) {
+	                var ret = obj, i, l;
+	                if (!(obj instanceof Base)) {
+	                    var OurBase = Base;
+	                    for (i = 0, l = defined.length; i < l; i++) {
+	                        var definer = defined[i];
+	                        if (definer[0](obj)) {
+	                            OurBase = OurBase.extend({instance: definer[1]});
+	                        }
+	                    }
+	                    ret = new OurBase(obj);
+	                    ret["__extender__"] = _extender;
+	                }
+	                return ret;
+	            }
+
+	            function always() {
+	                return true;
+	            }
+
+	            function define(tester, decorate) {
+	                if (arguments.length) {
+	                    if (typeof tester === "object") {
+	                        decorate = tester;
+	                        tester = always;
+	                    }
+	                    decorate = decorate || {};
+	                    var proto = {};
+	                    decorateProto(proto, decorate);
+	                    //handle browsers like which skip over the constructor while looping
+	                    if (!proto.hasOwnProperty("constructor")) {
+	                        if (decorate.hasOwnProperty("constructor")) {
+	                            addMethod(proto, "constructor", decorate.constructor);
+	                        } else {
+	                            proto.constructor = function () {
+	                                this._super(arguments);
+	                            };
+	                        }
+	                    }
+	                    defined.push([tester, proto]);
+	                }
+	                return _extender;
+	            }
+
+	            function extend(supr) {
+	                if (supr && supr.hasOwnProperty("__defined__")) {
+	                    _extender["__defined__"] = defined = defined.concat(supr["__defined__"]);
+	                }
+	                merge(_extender, supr, ["define", "extend", "expose", "__defined__"]);
+	                return _extender;
+	            }
+
+	            _extender.define = define;
+	            _extender.extend = extend;
+	            _extender.expose = function expose() {
+	                var methods;
+	                for (var i = 0, l = arguments.length; i < l; i++) {
+	                    methods = arguments[i];
+	                    if (typeof methods === "object") {
+	                        merge(_extender, methods, ["define", "extend", "expose", "__defined__"]);
+	                    }
+	                }
+	                return _extender;
+	            };
+	            _extender["__defined__"] = defined;
+
+
+	            return _extender;
+	        }
+
+	        return {
+	            define: function () {
+	                return extender().define.apply(extender, arguments);
+	            },
+
+	            extend: function (supr) {
+	                return extender().define().extend(supr);
+	            }
+	        };
+
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineExtender(__webpack_require__(36));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["declare"], function (declare) {
+	            return defineExtender(declare);
+	        });
+	    } else {
+	        this.extender = defineExtender(this.declare);
+	    }
+
+	}).call(this);
+
+/***/ },
+/* 36 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(37);
+
+/***/ },
+/* 37 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+
+	    /**
+	     * @projectName declare
+	     * @github http://github.com/doug-martin/declare.js
+	     * @header
+	     *
+	     * Declare is a library designed to allow writing object oriented code the same way in both the browser and node.js.
+	     *
+	     * ##Installation
+	     *
+	     * `npm install declare.js`
+	     *
+	     * Or [download the source](https://raw.github.com/doug-martin/declare.js/master/declare.js) ([minified](https://raw.github.com/doug-martin/declare.js/master/declare-min.js))
+	     *
+	     * ###Requirejs
+	     *
+	     * To use with requirejs place the `declare` source in the root scripts directory
+	     *
+	     * ```
+	     *
+	     * define(["declare"], function(declare){
+	     *      return declare({
+	     *          instance : {
+	     *              hello : function(){
+	     *                  return "world";
+	     *              }
+	     *          }
+	     *      });
+	     * });
+	     *
+	     * ```
+	     *
+	     *
+	     * ##Usage
+	     *
+	     * declare.js provides
+	     *
+	     * Class methods
+	     *
+	     * * `as(module | object, name)` : exports the object to module or the object with the name
+	     * * `mixin(mixin)` : mixes in an object but does not inherit directly from the object. **Note** this does not return a new class but changes the original class.
+	     * * `extend(proto)` : extend a class with the given properties. A shortcut to `declare(Super, {})`;
+	     *
+	     * Instance methods
+	     *
+	     * * `_super(arguments)`: calls the super of the current method, you can pass in either the argments object or an array with arguments you want passed to super
+	     * * `_getSuper()`: returns a this methods direct super.
+	     * * `_static` : use to reference class properties and methods.
+	     * * `get(prop)` : gets a property invoking the getter if it exists otherwise it just returns the named property on the object.
+	     * * `set(prop, val)` : sets a property invoking the setter if it exists otherwise it just sets the named property on the object.
+	     *
+	     *
+	     * ###Declaring a new Class
+	     *
+	     * Creating a new class with declare is easy!
+	     *
+	     * ```
+	     *
+	     * var Mammal = declare({
+	     *      //define your instance methods and properties
+	     *      instance : {
+	     *
+	     *          //will be called whenever a new instance is created
+	     *          constructor: function(options) {
+	     *              options = options || {};
+	     *              this._super(arguments);
+	     *              this._type = options.type || "mammal";
+	     *          },
+	     *
+	     *          speak : function() {
+	     *              return  "A mammal of type " + this._type + " sounds like";
+	     *          },
+	     *
+	     *          //Define your getters
+	     *          getters : {
+	     *
+	     *              //can be accessed by using the get method. (mammal.get("type"))
+	     *              type : function() {
+	     *                  return this._type;
+	     *              }
+	     *          },
+	     *
+	     *           //Define your setters
+	     *          setters : {
+	     *
+	     *                //can be accessed by using the set method. (mammal.set("type", "mammalType"))
+	     *              type : function(t) {
+	     *                  this._type = t;
+	     *              }
+	     *          }
+	     *      },
+	     *
+	     *      //Define your static methods
+	     *      static : {
+	     *
+	     *          //Mammal.soundOff(); //"Im a mammal!!"
+	     *          soundOff : function() {
+	     *              return "Im a mammal!!";
+	     *          }
+	     *      }
+	     * });
+	     *
+	     *
+	     * ```
+	     *
+	     * You can use Mammal just like you would any other class.
+	     *
+	     * ```
+	     * Mammal.soundOff("Im a mammal!!");
+	     *
+	     * var myMammal = new Mammal({type : "mymammal"});
+	     * myMammal.speak(); // "A mammal of type mymammal sounds like"
+	     * myMammal.get("type"); //"mymammal"
+	     * myMammal.set("type", "mammal");
+	     * myMammal.get("type"); //"mammal"
+	     *
+	     *
+	     * ```
+	     *
+	     * ###Extending a class
+	     *
+	     * If you want to just extend a single class use the .extend method.
+	     *
+	     * ```
+	     *
+	     * var Wolf = Mammal.extend({
+	     *
+	     *   //define your instance method
+	     *   instance: {
+	     *
+	     *        //You can override super constructors just be sure to call `_super`
+	     *       constructor: function(options) {
+	     *          options = options || {};
+	     *          this._super(arguments); //call our super constructor.
+	     *          this._sound = "growl";
+	     *          this._color = options.color || "grey";
+	     *      },
+	     *
+	     *      //override Mammals `speak` method by appending our own data to it.
+	     *      speak : function() {
+	     *          return this._super(arguments) + " a " + this._sound;
+	     *      },
+	     *
+	     *      //add new getters for sound and color
+	     *      getters : {
+	     *
+	     *           //new Wolf().get("type")
+	     *           //notice color is read only as we did not define a setter
+	     *          color : function() {
+	     *              return this._color;
+	     *          },
+	     *
+	     *          //new Wolf().get("sound")
+	     *          sound : function() {
+	     *              return this._sound;
+	     *          }
+	     *      },
+	     *
+	     *      setters : {
+	     *
+	     *          //new Wolf().set("sound", "howl")
+	     *          sound : function(s) {
+	     *              this._sound = s;
+	     *          }
+	     *      }
+	     *
+	     *  },
+	     *
+	     *  static : {
+	     *
+	     *      //You can override super static methods also! And you can still use _super
+	     *      soundOff : function() {
+	     *          //You can even call super in your statics!!!
+	     *          //should return "I'm a mammal!! that growls"
+	     *          return this._super(arguments) + " that growls";
+	     *      }
+	     *  }
+	     * });
+	     *
+	     * Wolf.soundOff(); //Im a mammal!! that growls
+	     *
+	     * var myWolf = new Wolf();
+	     * myWolf instanceof Mammal //true
+	     * myWolf instanceof Wolf //true
+	     *
+	     * ```
+	     *
+	     * You can also extend a class by using the declare method and just pass in the super class.
+	     *
+	     * ```
+	     * //Typical hierarchical inheritance
+	     * // Mammal->Wolf->Dog
+	     * var Dog = declare(Wolf, {
+	     *    instance: {
+	     *        constructor: function(options) {
+	     *            options = options || {};
+	     *            this._super(arguments);
+	     *            //override Wolfs initialization of sound to woof.
+	     *            this._sound = "woof";
+	     *
+	     *        },
+	     *
+	     *        speak : function() {
+	     *            //Should return "A mammal of type mammal sounds like a growl thats domesticated"
+	     *            return this._super(arguments) + " thats domesticated";
+	     *        }
+	     *    },
+	     *
+	     *    static : {
+	     *        soundOff : function() {
+	     *            //should return "I'm a mammal!! that growls but now barks"
+	     *            return this._super(arguments) + " but now barks";
+	     *        }
+	     *    }
+	     * });
+	     *
+	     * Dog.soundOff(); //Im a mammal!! that growls but now barks
+	     *
+	     * var myDog = new Dog();
+	     * myDog instanceof Mammal //true
+	     * myDog instanceof Wolf //true
+	     * myDog instanceof Dog //true
+	     *
+	     *
+	     * //Notice you still get the extend method.
+	     *
+	     * // Mammal->Wolf->Dog->Breed
+	     * var Breed = Dog.extend({
+	     *    instance: {
+	     *
+	     *        //initialize outside of constructor
+	     *        _pitch : "high",
+	     *
+	     *        constructor: function(options) {
+	     *            options = options || {};
+	     *            this._super(arguments);
+	     *            this.breed = options.breed || "lab";
+	     *        },
+	     *
+	     *        speak : function() {
+	     *            //Should return "A mammal of type mammal sounds like a
+	     *            //growl thats domesticated with a high pitch!"
+	     *            return this._super(arguments) + " with a " + this._pitch + " pitch!";
+	     *        },
+	     *
+	     *        getters : {
+	     *            pitch : function() {
+	     *                return this._pitch;
+	     *            }
+	     *        }
+	     *    },
+	     *
+	     *    static : {
+	     *        soundOff : function() {
+	     *            //should return "I'M A MAMMAL!! THAT GROWLS BUT NOW BARKS!"
+	     *            return this._super(arguments).toUpperCase() + "!";
+	     *        }
+	     *    }
+	     * });
+	     *
+	     *
+	     * Breed.soundOff()//"IM A MAMMAL!! THAT GROWLS BUT NOW BARKS!"
+	     *
+	     * var myBreed = new Breed({color : "gold", type : "lab"}),
+	     * myBreed instanceof Dog //true
+	     * myBreed instanceof Wolf //true
+	     * myBreed instanceof Mammal //true
+	     * myBreed.speak() //"A mammal of type lab sounds like a woof thats domesticated with a high pitch!"
+	     * myBreed.get("type") //"lab"
+	     * myBreed.get("color") //"gold"
+	     * myBreed.get("sound")" //"woof"
+	     * ```
+	     *
+	     * ###Multiple Inheritance / Mixins
+	     *
+	     * declare also allows the use of multiple super classes.
+	     * This is useful if you have generic classes that provide functionality but shouldnt be used on their own.
+	     *
+	     * Lets declare a mixin that allows us to watch for property changes.
+	     *
+	     * ```
+	     * //Notice that we set up the functions outside of declare because we can reuse them
+	     *
+	     * function _set(prop, val) {
+	     *     //get the old value
+	     *     var oldVal = this.get(prop);
+	     *     //call super to actually set the property
+	     *     var ret = this._super(arguments);
+	     *     //call our handlers
+	     *     this.__callHandlers(prop, oldVal, val);
+	     *     return ret;
+	     * }
+	     *
+	     * function _callHandlers(prop, oldVal, newVal) {
+	     *    //get our handlers for the property
+	     *     var handlers = this.__watchers[prop], l;
+	     *     //if the handlers exist and their length does not equal 0 then we call loop through them
+	     *     if (handlers && (l = handlers.length) !== 0) {
+	     *         for (var i = 0; i < l; i++) {
+	     *             //call the handler
+	     *             handlers[i].call(null, prop, oldVal, newVal);
+	     *         }
+	     *     }
+	     * }
+	     *
+	     *
+	     * //the watch function
+	     * function _watch(prop, handler) {
+	     *     if ("function" !== typeof handler) {
+	     *         //if its not a function then its an invalid handler
+	     *         throw new TypeError("Invalid handler.");
+	     *     }
+	     *     if (!this.__watchers[prop]) {
+	     *         //create the watchers if it doesnt exist
+	     *         this.__watchers[prop] = [handler];
+	     *     } else {
+	     *         //otherwise just add it to the handlers array
+	     *         this.__watchers[prop].push(handler);
+	     *     }
+	     * }
+	     *
+	     * function _unwatch(prop, handler) {
+	     *     if ("function" !== typeof handler) {
+	     *         throw new TypeError("Invalid handler.");
+	     *     }
+	     *     var handlers = this.__watchers[prop], index;
+	     *     if (handlers && (index = handlers.indexOf(handler)) !== -1) {
+	     *        //remove the handler if it is found
+	     *         handlers.splice(index, 1);
+	     *     }
+	     * }
+	     *
+	     * declare({
+	     *     instance:{
+	     *         constructor:function () {
+	     *             this._super(arguments);
+	     *             //set up our watchers
+	     *             this.__watchers = {};
+	     *         },
+	     *
+	     *         //override the default set function so we can watch values
+	     *         "set":_set,
+	     *         //set up our callhandlers function
+	     *         __callHandlers:_callHandlers,
+	     *         //add the watch function
+	     *         watch:_watch,
+	     *         //add the unwatch function
+	     *         unwatch:_unwatch
+	     *     },
+	     *
+	     *     "static":{
+	     *
+	     *         init:function () {
+	     *             this._super(arguments);
+	     *             this.__watchers = {};
+	     *         },
+	     *         //override the default set function so we can watch values
+	     *         "set":_set,
+	     *         //set our callHandlers function
+	     *         __callHandlers:_callHandlers,
+	     *         //add the watch
+	     *         watch:_watch,
+	     *         //add the unwatch function
+	     *         unwatch:_unwatch
+	     *     }
+	     * })
+	     *
+	     * ```
+	     *
+	     * Now lets use the mixin
+	     *
+	     * ```
+	     * var WatchDog = declare([Dog, WatchMixin]);
+	     *
+	     * var watchDog = new WatchDog();
+	     * //create our handler
+	     * function watch(id, oldVal, newVal) {
+	     *     console.log("watchdog's %s was %s, now %s", id, oldVal, newVal);
+	     * }
+	     *
+	     * //watch for property changes
+	     * watchDog.watch("type", watch);
+	     * watchDog.watch("color", watch);
+	     * watchDog.watch("sound", watch);
+	     *
+	     * //now set the properties each handler will be called
+	     * watchDog.set("type", "newDog");
+	     * watchDog.set("color", "newColor");
+	     * watchDog.set("sound", "newSound");
+	     *
+	     *
+	     * //unwatch the property changes
+	     * watchDog.unwatch("type", watch);
+	     * watchDog.unwatch("color", watch);
+	     * watchDog.unwatch("sound", watch);
+	     *
+	     * //no handlers will be called this time
+	     * watchDog.set("type", "newDog");
+	     * watchDog.set("color", "newColor");
+	     * watchDog.set("sound", "newSound");
+	     *
+	     *
+	     * ```
+	     *
+	     * ###Accessing static methods and properties witin an instance.
+	     *
+	     * To access static properties on an instance use the `_static` property which is a reference to your constructor.
+	     *
+	     * For example if your in your constructor and you want to have configurable default values.
+	     *
+	     * ```
+	     * consturctor : function constructor(opts){
+	     *     this.opts = opts || {};
+	     *     this._type = opts.type || this._static.DEFAULT_TYPE;
+	     * }
+	     * ```
+	     *
+	     *
+	     *
+	     * ###Creating a new instance of within an instance.
+	     *
+	     * Often times you want to create a new instance of an object within an instance. If your subclassed however you cannot return a new instance of the parent class as it will not be the right sub class. `declare` provides a way around this by setting the `_static` property on each isntance of the class.
+	     *
+	     * Lets add a reproduce method `Mammal`
+	     *
+	     * ```
+	     * reproduce : function(options){
+	     *     return new this._static(options);
+	     * }
+	     * ```
+	     *
+	     * Now in each subclass you can call reproduce and get the proper type.
+	     *
+	     * ```
+	     * var myDog = new Dog();
+	     * var myDogsChild = myDog.reproduce();
+	     *
+	     * myDogsChild instanceof Dog; //true
+	     * ```
+	     *
+	     * ###Using the `as`
+	     *
+	     * `declare` also provides an `as` method which allows you to add your class to an object or if your using node.js you can pass in `module` and the class will be exported as the module.
+	     *
+	     * ```
+	     * var animals = {};
+	     *
+	     * Mammal.as(animals, "Dog");
+	     * Wolf.as(animals, "Wolf");
+	     * Dog.as(animals, "Dog");
+	     * Breed.as(animals, "Breed");
+	     *
+	     * var myDog = new animals.Dog();
+	     *
+	     * ```
+	     *
+	     * Or in node
+	     *
+	     * ```
+	     * Mammal.as(exports, "Dog");
+	     * Wolf.as(exports, "Wolf");
+	     * Dog.as(exports, "Dog");
+	     * Breed.as(exports, "Breed");
+	     *
+	     * ```
+	     *
+	     * To export a class as the `module` in node
+	     *
+	     * ```
+	     * Mammal.as(module);
+	     * ```
+	     *
+	     *
+	     */
+	    function createDeclared() {
+	        var arraySlice = Array.prototype.slice, classCounter = 0, Base, forceNew = new Function();
+
+	        var SUPER_REGEXP = /(super)/g;
+
+	        function argsToArray(args, slice) {
+	            slice = slice || 0;
+	            return arraySlice.call(args, slice);
+	        }
+
+	        function isArray(obj) {
+	            return Object.prototype.toString.call(obj) === "[object Array]";
+	        }
+
+	        function isObject(obj) {
+	            var undef;
+	            return obj !== null && obj !== undef && typeof obj === "object";
+	        }
+
+	        function isHash(obj) {
+	            var ret = isObject(obj);
+	            return ret && obj.constructor === Object;
+	        }
+
+	        var isArguments = function _isArguments(object) {
+	            return Object.prototype.toString.call(object) === '[object Arguments]';
+	        };
+
+	        if (!isArguments(arguments)) {
+	            isArguments = function _isArguments(obj) {
+	                return !!(obj && obj.hasOwnProperty("callee"));
+	            };
+	        }
+
+	        function indexOf(arr, item) {
+	            if (arr && arr.length) {
+	                for (var i = 0, l = arr.length; i < l; i++) {
+	                    if (arr[i] === item) {
+	                        return i;
+	                    }
+	                }
+	            }
+	            return -1;
+	        }
+
+	        function merge(target, source, exclude) {
+	            var name, s;
+	            for (name in source) {
+	                if (source.hasOwnProperty(name) && indexOf(exclude, name) === -1) {
+	                    s = source[name];
+	                    if (!(name in target) || (target[name] !== s)) {
+	                        target[name] = s;
+	                    }
+	                }
+	            }
+	            return target;
+	        }
+
+	        function callSuper(args, a) {
+	            var meta = this.__meta,
+	                supers = meta.supers,
+	                l = supers.length, superMeta = meta.superMeta, pos = superMeta.pos;
+	            if (l > pos) {
+	                args = !args ? [] : (!isArguments(args) && !isArray(args)) ? [args] : args;
+	                var name = superMeta.name, f = superMeta.f, m;
+	                do {
+	                    m = supers[pos][name];
+	                    if ("function" === typeof m && (m = m._f || m) !== f) {
+	                        superMeta.pos = 1 + pos;
+	                        return m.apply(this, args);
+	                    }
+	                } while (l > ++pos);
+	            }
+
+	            return null;
+	        }
+
+	        function getSuper() {
+	            var meta = this.__meta,
+	                supers = meta.supers,
+	                l = supers.length, superMeta = meta.superMeta, pos = superMeta.pos;
+	            if (l > pos) {
+	                var name = superMeta.name, f = superMeta.f, m;
+	                do {
+	                    m = supers[pos][name];
+	                    if ("function" === typeof m && (m = m._f || m) !== f) {
+	                        superMeta.pos = 1 + pos;
+	                        return m.bind(this);
+	                    }
+	                } while (l > ++pos);
+	            }
+	            return null;
+	        }
+
+	        function getter(name) {
+	            var getters = this.__getters__;
+	            if (getters.hasOwnProperty(name)) {
+	                return getters[name].apply(this);
+	            } else {
+	                return this[name];
+	            }
+	        }
+
+	        function setter(name, val) {
+	            var setters = this.__setters__;
+	            if (isHash(name)) {
+	                for (var i in name) {
+	                    var prop = name[i];
+	                    if (setters.hasOwnProperty(i)) {
+	                        setters[name].call(this, prop);
+	                    } else {
+	                        this[i] = prop;
+	                    }
+	                }
+	            } else {
+	                if (setters.hasOwnProperty(name)) {
+	                    return setters[name].apply(this, argsToArray(arguments, 1));
+	                } else {
+	                    return this[name] = val;
+	                }
+	            }
+	        }
+
+
+	        function defaultFunction() {
+	            var meta = this.__meta || {},
+	                supers = meta.supers,
+	                l = supers.length, superMeta = meta.superMeta, pos = superMeta.pos;
+	            if (l > pos) {
+	                var name = superMeta.name, f = superMeta.f, m;
+	                do {
+	                    m = supers[pos][name];
+	                    if ("function" === typeof m && (m = m._f || m) !== f) {
+	                        superMeta.pos = 1 + pos;
+	                        return m.apply(this, arguments);
+	                    }
+	                } while (l > ++pos);
+	            }
+	            return null;
+	        }
+
+
+	        function functionWrapper(f, name) {
+	            if (f.toString().match(SUPER_REGEXP)) {
+	                var wrapper = function wrapper() {
+	                    var ret, meta = this.__meta || {};
+	                    var orig = meta.superMeta;
+	                    meta.superMeta = {f: f, pos: 0, name: name};
+	                    switch (arguments.length) {
+	                    case 0:
+	                        ret = f.call(this);
+	                        break;
+	                    case 1:
+	                        ret = f.call(this, arguments[0]);
+	                        break;
+	                    case 2:
+	                        ret = f.call(this, arguments[0], arguments[1]);
+	                        break;
+
+	                    case 3:
+	                        ret = f.call(this, arguments[0], arguments[1], arguments[2]);
+	                        break;
+	                    default:
+	                        ret = f.apply(this, arguments);
+	                    }
+	                    meta.superMeta = orig;
+	                    return ret;
+	                };
+	                wrapper._f = f;
+	                return wrapper;
+	            } else {
+	                f._f = f;
+	                return f;
+	            }
+	        }
+
+	        function defineMixinProps(child, proto) {
+
+	            var operations = proto.setters || {}, __setters = child.__setters__, __getters = child.__getters__;
+	            for (var i in operations) {
+	                if (!__setters.hasOwnProperty(i)) {  //make sure that the setter isnt already there
+	                    __setters[i] = operations[i];
+	                }
+	            }
+	            operations = proto.getters || {};
+	            for (i in operations) {
+	                if (!__getters.hasOwnProperty(i)) {  //make sure that the setter isnt already there
+	                    __getters[i] = operations[i];
+	                }
+	            }
+	            for (var j in proto) {
+	                if (j !== "getters" && j !== "setters") {
+	                    var p = proto[j];
+	                    if ("function" === typeof p) {
+	                        if (!child.hasOwnProperty(j)) {
+	                            child[j] = functionWrapper(defaultFunction, j);
+	                        }
+	                    } else {
+	                        child[j] = p;
+	                    }
+	                }
+	            }
+	        }
+
+	        function mixin() {
+	            var args = argsToArray(arguments), l = args.length;
+	            var child = this.prototype;
+	            var childMeta = child.__meta, thisMeta = this.__meta, bases = child.__meta.bases, staticBases = bases.slice(),
+	                staticSupers = thisMeta.supers || [], supers = childMeta.supers || [];
+	            for (var i = 0; i < l; i++) {
+	                var m = args[i], mProto = m.prototype;
+	                var protoMeta = mProto.__meta, meta = m.__meta;
+	                !protoMeta && (protoMeta = (mProto.__meta = {proto: mProto || {}}));
+	                !meta && (meta = (m.__meta = {proto: m.__proto__ || {}}));
+	                defineMixinProps(child, protoMeta.proto || {});
+	                defineMixinProps(this, meta.proto || {});
+	                //copy the bases for static,
+
+	                mixinSupers(m.prototype, supers, bases);
+	                mixinSupers(m, staticSupers, staticBases);
+	            }
+	            return this;
+	        }
+
+	        function mixinSupers(sup, arr, bases) {
+	            var meta = sup.__meta;
+	            !meta && (meta = (sup.__meta = {}));
+	            var unique = sup.__meta.unique;
+	            !unique && (meta.unique = "declare" + ++classCounter);
+	            //check it we already have this super mixed into our prototype chain
+	            //if true then we have already looped their supers!
+	            if (indexOf(bases, unique) === -1) {
+	                //add their id to our bases
+	                bases.push(unique);
+	                var supers = sup.__meta.supers || [], i = supers.length - 1 || 0;
+	                while (i >= 0) {
+	                    mixinSupers(supers[i--], arr, bases);
+	                }
+	                arr.unshift(sup);
+	            }
+	        }
+
+	        function defineProps(child, proto) {
+	            var operations = proto.setters,
+	                __setters = child.__setters__,
+	                __getters = child.__getters__;
+	            if (operations) {
+	                for (var i in operations) {
+	                    __setters[i] = operations[i];
+	                }
+	            }
+	            operations = proto.getters || {};
+	            if (operations) {
+	                for (i in operations) {
+	                    __getters[i] = operations[i];
+	                }
+	            }
+	            for (i in proto) {
+	                if (i != "getters" && i != "setters") {
+	                    var f = proto[i];
+	                    if ("function" === typeof f) {
+	                        var meta = f.__meta || {};
+	                        if (!meta.isConstructor) {
+	                            child[i] = functionWrapper(f, i);
+	                        } else {
+	                            child[i] = f;
+	                        }
+	                    } else {
+	                        child[i] = f;
+	                    }
+	                }
+	            }
+
+	        }
+
+	        function _export(obj, name) {
+	            if (obj && name) {
+	                obj[name] = this;
+	            } else {
+	                obj.exports = obj = this;
+	            }
+	            return this;
+	        }
+
+	        function extend(proto) {
+	            return declare(this, proto);
+	        }
+
+	        function getNew(ctor) {
+	            // create object with correct prototype using a do-nothing
+	            // constructor
+	            forceNew.prototype = ctor.prototype;
+	            var t = new forceNew();
+	            forceNew.prototype = null;	// clean up
+	            return t;
+	        }
+
+
+	        function __declare(child, sup, proto) {
+	            var childProto = {}, supers = [];
+	            var unique = "declare" + ++classCounter, bases = [], staticBases = [];
+	            var instanceSupers = [], staticSupers = [];
+	            var meta = {
+	                supers: instanceSupers,
+	                unique: unique,
+	                bases: bases,
+	                superMeta: {
+	                    f: null,
+	                    pos: 0,
+	                    name: null
+	                }
+	            };
+	            var childMeta = {
+	                supers: staticSupers,
+	                unique: unique,
+	                bases: staticBases,
+	                isConstructor: true,
+	                superMeta: {
+	                    f: null,
+	                    pos: 0,
+	                    name: null
+	                }
+	            };
+
+	            if (isHash(sup) && !proto) {
+	                proto = sup;
+	                sup = Base;
+	            }
+
+	            if ("function" === typeof sup || isArray(sup)) {
+	                supers = isArray(sup) ? sup : [sup];
+	                sup = supers.shift();
+	                child.__meta = childMeta;
+	                childProto = getNew(sup);
+	                childProto.__meta = meta;
+	                childProto.__getters__ = merge({}, childProto.__getters__ || {});
+	                childProto.__setters__ = merge({}, childProto.__setters__ || {});
+	                child.__getters__ = merge({}, child.__getters__ || {});
+	                child.__setters__ = merge({}, child.__setters__ || {});
+	                mixinSupers(sup.prototype, instanceSupers, bases);
+	                mixinSupers(sup, staticSupers, staticBases);
+	            } else {
+	                child.__meta = childMeta;
+	                childProto.__meta = meta;
+	                childProto.__getters__ = childProto.__getters__ || {};
+	                childProto.__setters__ = childProto.__setters__ || {};
+	                child.__getters__ = child.__getters__ || {};
+	                child.__setters__ = child.__setters__ || {};
+	            }
+	            child.prototype = childProto;
+	            if (proto) {
+	                var instance = meta.proto = proto.instance || {};
+	                var stat = childMeta.proto = proto.static || {};
+	                stat.init = stat.init || defaultFunction;
+	                defineProps(childProto, instance);
+	                defineProps(child, stat);
+	                if (!instance.hasOwnProperty("constructor")) {
+	                    childProto.constructor = instance.constructor = functionWrapper(defaultFunction, "constructor");
+	                } else {
+	                    childProto.constructor = functionWrapper(instance.constructor, "constructor");
+	                }
+	            } else {
+	                meta.proto = {};
+	                childMeta.proto = {};
+	                child.init = functionWrapper(defaultFunction, "init");
+	                childProto.constructor = functionWrapper(defaultFunction, "constructor");
+	            }
+	            if (supers.length) {
+	                mixin.apply(child, supers);
+	            }
+	            if (sup) {
+	                //do this so we mixin our super methods directly but do not ov
+	                merge(child, merge(merge({}, sup), child));
+	            }
+	            childProto._super = child._super = callSuper;
+	            childProto._getSuper = child._getSuper = getSuper;
+	            childProto._static = child;
+	        }
+
+	        function declare(sup, proto) {
+	            function declared() {
+	                switch (arguments.length) {
+	                case 0:
+	                    this.constructor.call(this);
+	                    break;
+	                case 1:
+	                    this.constructor.call(this, arguments[0]);
+	                    break;
+	                case 2:
+	                    this.constructor.call(this, arguments[0], arguments[1]);
+	                    break;
+	                case 3:
+	                    this.constructor.call(this, arguments[0], arguments[1], arguments[2]);
+	                    break;
+	                default:
+	                    this.constructor.apply(this, arguments);
+	                }
+	            }
+
+	            __declare(declared, sup, proto);
+	            return declared.init() || declared;
+	        }
+
+	        function singleton(sup, proto) {
+	            var retInstance;
+
+	            function declaredSingleton() {
+	                if (!retInstance) {
+	                    this.constructor.apply(this, arguments);
+	                    retInstance = this;
+	                }
+	                return retInstance;
+	            }
+
+	            __declare(declaredSingleton, sup, proto);
+	            return  declaredSingleton.init() || declaredSingleton;
+	        }
+
+	        Base = declare({
+	            instance: {
+	                "get": getter,
+	                "set": setter
+	            },
+
+	            "static": {
+	                "get": getter,
+	                "set": setter,
+	                mixin: mixin,
+	                extend: extend,
+	                as: _export
+	            }
+	        });
+
+	        declare.singleton = singleton;
+	        return declare;
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = createDeclared();
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(createDeclared);
+	    } else {
+	        this.declare = createDeclared();
+	    }
+	}());
+
+
+
+
+
+/***/ },
+/* 38 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+	    /*global extended isExtended*/
+
+	    function defineObject(extended, is, arr) {
+
+	        var deepEqual = is.deepEqual,
+	            isString = is.isString,
+	            isHash = is.isHash,
+	            difference = arr.difference,
+	            hasOwn = Object.prototype.hasOwnProperty,
+	            isFunction = is.isFunction;
+
+	        function _merge(target, source) {
+	            var name, s;
+	            for (name in source) {
+	                if (hasOwn.call(source, name)) {
+	                    s = source[name];
+	                    if (!(name in target) || (target[name] !== s)) {
+	                        target[name] = s;
+	                    }
+	                }
+	            }
+	            return target;
+	        }
+
+	        function _deepMerge(target, source) {
+	            var name, s, t;
+	            for (name in source) {
+	                if (hasOwn.call(source, name)) {
+	                    s = source[name];
+	                    t = target[name];
+	                    if (!deepEqual(t, s)) {
+	                        if (isHash(t) && isHash(s)) {
+	                            target[name] = _deepMerge(t, s);
+	                        } else if (isHash(s)) {
+	                            target[name] = _deepMerge({}, s);
+	                        } else {
+	                            target[name] = s;
+	                        }
+	                    }
+	                }
+	            }
+	            return target;
+	        }
+
+
+	        function merge(obj) {
+	            if (!obj) {
+	                obj = {};
+	            }
+	            for (var i = 1, l = arguments.length; i < l; i++) {
+	                _merge(obj, arguments[i]);
+	            }
+	            return obj; // Object
+	        }
+
+	        function deepMerge(obj) {
+	            if (!obj) {
+	                obj = {};
+	            }
+	            for (var i = 1, l = arguments.length; i < l; i++) {
+	                _deepMerge(obj, arguments[i]);
+	            }
+	            return obj; // Object
+	        }
+
+
+	        function extend(parent, child) {
+	            var proto = parent.prototype || parent;
+	            merge(proto, child);
+	            return parent;
+	        }
+
+	        function forEach(hash, iterator, scope) {
+	            if (!isHash(hash) || !isFunction(iterator)) {
+	                throw new TypeError();
+	            }
+	            var objKeys = keys(hash), key;
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                key = objKeys[i];
+	                iterator.call(scope || hash, hash[key], key, hash);
+	            }
+	            return hash;
+	        }
+
+	        function filter(hash, iterator, scope) {
+	            if (!isHash(hash) || !isFunction(iterator)) {
+	                throw new TypeError();
+	            }
+	            var objKeys = keys(hash), key, value, ret = {};
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                key = objKeys[i];
+	                value = hash[key];
+	                if (iterator.call(scope || hash, value, key, hash)) {
+	                    ret[key] = value;
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function values(hash) {
+	            if (!isHash(hash)) {
+	                throw new TypeError();
+	            }
+	            var objKeys = keys(hash), ret = [];
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                ret.push(hash[objKeys[i]]);
+	            }
+	            return ret;
+	        }
+
+
+	        function keys(hash) {
+	            if (!isHash(hash)) {
+	                throw new TypeError();
+	            }
+	            var ret = [];
+	            for (var i in hash) {
+	                if (hasOwn.call(hash, i)) {
+	                    ret.push(i);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function invert(hash) {
+	            if (!isHash(hash)) {
+	                throw new TypeError();
+	            }
+	            var objKeys = keys(hash), key, ret = {};
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                key = objKeys[i];
+	                ret[hash[key]] = key;
+	            }
+	            return ret;
+	        }
+
+	        function toArray(hash) {
+	            if (!isHash(hash)) {
+	                throw new TypeError();
+	            }
+	            var objKeys = keys(hash), key, ret = [];
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                key = objKeys[i];
+	                ret.push([key, hash[key]]);
+	            }
+	            return ret;
+	        }
+
+	        function omit(hash, omitted) {
+	            if (!isHash(hash)) {
+	                throw new TypeError();
+	            }
+	            if (isString(omitted)) {
+	                omitted = [omitted];
+	            }
+	            var objKeys = difference(keys(hash), omitted), key, ret = {};
+	            for (var i = 0, len = objKeys.length; i < len; ++i) {
+	                key = objKeys[i];
+	                ret[key] = hash[key];
+	            }
+	            return ret;
+	        }
+
+	        var hash = {
+	            forEach: forEach,
+	            filter: filter,
+	            invert: invert,
+	            values: values,
+	            toArray: toArray,
+	            keys: keys,
+	            omit: omit
+	        };
+
+
+	        var obj = {
+	            extend: extend,
+	            merge: merge,
+	            deepMerge: deepMerge,
+	            omit: omit
+	        };
+
+	        var ret = extended.define(is.isObject, obj).define(isHash, hash).define(is.isFunction, {extend: extend}).expose({hash: hash}).expose(obj);
+	        var orig = ret.extend;
+	        ret.extend = function __extend() {
+	            if (arguments.length === 1) {
+	                return orig.extend.apply(ret, arguments);
+	            } else {
+	                extend.apply(null, arguments);
+	            }
+	        };
+	        return ret;
+
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineObject(__webpack_require__(33), __webpack_require__(32), __webpack_require__(39));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended", "is-extended", "array-extended"], function (extended, is, array) {
+	            return defineObject(extended, is, array);
+	        });
+	    } else {
+	        this.objectExtended = defineObject(this.extended, this.isExtended, this.arrayExtended);
+	    }
+
+	}).call(this);
+
+
+
+
+
+
+
+
+/***/ },
+/* 39 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+	    /*global define*/
+
+	    function defineArray(extended, is, args) {
+
+	        var isString = is.isString,
+	            isArray = Array.isArray || is.isArray,
+	            isDate = is.isDate,
+	            floor = Math.floor,
+	            abs = Math.abs,
+	            mathMax = Math.max,
+	            mathMin = Math.min,
+	            arrayProto = Array.prototype,
+	            arrayIndexOf = arrayProto.indexOf,
+	            arrayForEach = arrayProto.forEach,
+	            arrayMap = arrayProto.map,
+	            arrayReduce = arrayProto.reduce,
+	            arrayReduceRight = arrayProto.reduceRight,
+	            arrayFilter = arrayProto.filter,
+	            arrayEvery = arrayProto.every,
+	            arraySome = arrayProto.some,
+	            argsToArray = args.argsToArray;
+
+
+	        function cross(num, cros) {
+	            return reduceRight(cros, function (a, b) {
+	                if (!isArray(b)) {
+	                    b = [b];
+	                }
+	                b.unshift(num);
+	                a.unshift(b);
+	                return a;
+	            }, []);
+	        }
+
+	        function permute(num, cross, length) {
+	            var ret = [];
+	            for (var i = 0; i < cross.length; i++) {
+	                ret.push([num].concat(rotate(cross, i)).slice(0, length));
+	            }
+	            return ret;
+	        }
+
+
+	        function intersection(a, b) {
+	            var ret = [], aOne, i = -1, l;
+	            l = a.length;
+	            while (++i < l) {
+	                aOne = a[i];
+	                if (indexOf(b, aOne) !== -1) {
+	                    ret.push(aOne);
+	                }
+	            }
+	            return ret;
+	        }
+
+
+	        var _sort = (function () {
+
+	            var isAll = function (arr, test) {
+	                return every(arr, test);
+	            };
+
+	            var defaultCmp = function (a, b) {
+	                return a - b;
+	            };
+
+	            var dateSort = function (a, b) {
+	                return a.getTime() - b.getTime();
+	            };
+
+	            return function _sort(arr, property) {
+	                var ret = [];
+	                if (isArray(arr)) {
+	                    ret = arr.slice();
+	                    if (property) {
+	                        if (typeof property === "function") {
+	                            ret.sort(property);
+	                        } else {
+	                            ret.sort(function (a, b) {
+	                                var aProp = a[property], bProp = b[property];
+	                                if (isString(aProp) && isString(bProp)) {
+	                                    return aProp > bProp ? 1 : aProp < bProp ? -1 : 0;
+	                                } else if (isDate(aProp) && isDate(bProp)) {
+	                                    return aProp.getTime() - bProp.getTime();
+	                                } else {
+	                                    return aProp - bProp;
+	                                }
+	                            });
+	                        }
+	                    } else {
+	                        if (isAll(ret, isString)) {
+	                            ret.sort();
+	                        } else if (isAll(ret, isDate)) {
+	                            ret.sort(dateSort);
+	                        } else {
+	                            ret.sort(defaultCmp);
+	                        }
+	                    }
+	                }
+	                return ret;
+	            };
+
+	        })();
+
+	        function indexOf(arr, searchElement, from) {
+	            var index = (from || 0) - 1,
+	                length = arr.length;
+	            while (++index < length) {
+	                if (arr[index] === searchElement) {
+	                    return index;
+	                }
+	            }
+	            return -1;
+	        }
+
+	        function lastIndexOf(arr, searchElement, from) {
+	            if (!isArray(arr)) {
+	                throw new TypeError();
+	            }
+
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            if (len === 0) {
+	                return -1;
+	            }
+
+	            var n = len;
+	            if (arguments.length > 2) {
+	                n = Number(arguments[2]);
+	                if (n !== n) {
+	                    n = 0;
+	                } else if (n !== 0 && n !== (1 / 0) && n !== -(1 / 0)) {
+	                    n = (n > 0 || -1) * floor(abs(n));
+	                }
+	            }
+
+	            var k = n >= 0 ? mathMin(n, len - 1) : len - abs(n);
+
+	            for (; k >= 0; k--) {
+	                if (k in t && t[k] === searchElement) {
+	                    return k;
+	                }
+	            }
+	            return -1;
+	        }
+
+	        function filter(arr, iterator, scope) {
+	            if (arr && arrayFilter && arrayFilter === arr.filter) {
+	                return arr.filter(iterator, scope);
+	            }
+	            if (!isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            var res = [];
+	            for (var i = 0; i < len; i++) {
+	                if (i in t) {
+	                    var val = t[i]; // in case fun mutates this
+	                    if (iterator.call(scope, val, i, t)) {
+	                        res.push(val);
+	                    }
+	                }
+	            }
+	            return res;
+	        }
+
+	        function forEach(arr, iterator, scope) {
+	            if (!isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+	            if (arr && arrayForEach && arrayForEach === arr.forEach) {
+	                arr.forEach(iterator, scope);
+	                return arr;
+	            }
+	            for (var i = 0, len = arr.length; i < len; ++i) {
+	                iterator.call(scope || arr, arr[i], i, arr);
+	            }
+
+	            return arr;
+	        }
+
+	        function every(arr, iterator, scope) {
+	            if (arr && arrayEvery && arrayEvery === arr.every) {
+	                return arr.every(iterator, scope);
+	            }
+	            if (!isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            for (var i = 0; i < len; i++) {
+	                if (i in t && !iterator.call(scope, t[i], i, t)) {
+	                    return false;
+	                }
+	            }
+	            return true;
+	        }
+
+	        function some(arr, iterator, scope) {
+	            if (arr && arraySome && arraySome === arr.some) {
+	                return arr.some(iterator, scope);
+	            }
+	            if (!isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            for (var i = 0; i < len; i++) {
+	                if (i in t && iterator.call(scope, t[i], i, t)) {
+	                    return true;
+	                }
+	            }
+	            return false;
+	        }
+
+	        function map(arr, iterator, scope) {
+	            if (arr && arrayMap && arrayMap === arr.map) {
+	                return arr.map(iterator, scope);
+	            }
+	            if (!isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            var res = [];
+	            for (var i = 0; i < len; i++) {
+	                if (i in t) {
+	                    res.push(iterator.call(scope, t[i], i, t));
+	                }
+	            }
+	            return res;
+	        }
+
+	        function reduce(arr, accumulator, curr) {
+	            var initial = arguments.length > 2;
+	            if (arr && arrayReduce && arrayReduce === arr.reduce) {
+	                return initial ? arr.reduce(accumulator, curr) : arr.reduce(accumulator);
+	            }
+	            if (!isArray(arr) || typeof accumulator !== "function") {
+	                throw new TypeError();
+	            }
+	            var i = 0, l = arr.length >> 0;
+	            if (arguments.length < 3) {
+	                if (l === 0) {
+	                    throw new TypeError("Array length is 0 and no second argument");
+	                }
+	                curr = arr[0];
+	                i = 1; // start accumulating at the second element
+	            } else {
+	                curr = arguments[2];
+	            }
+	            while (i < l) {
+	                if (i in arr) {
+	                    curr = accumulator.call(undefined, curr, arr[i], i, arr);
+	                }
+	                ++i;
+	            }
+	            return curr;
+	        }
+
+	        function reduceRight(arr, accumulator, curr) {
+	            var initial = arguments.length > 2;
+	            if (arr && arrayReduceRight && arrayReduceRight === arr.reduceRight) {
+	                return initial ? arr.reduceRight(accumulator, curr) : arr.reduceRight(accumulator);
+	            }
+	            if (!isArray(arr) || typeof accumulator !== "function") {
+	                throw new TypeError();
+	            }
+
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+
+	            // no value to return if no initial value, empty array
+	            if (len === 0 && arguments.length === 2) {
+	                throw new TypeError();
+	            }
+
+	            var k = len - 1;
+	            if (arguments.length >= 3) {
+	                curr = arguments[2];
+	            } else {
+	                do {
+	                    if (k in arr) {
+	                        curr = arr[k--];
+	                        break;
+	                    }
+	                }
+	                while (true);
+	            }
+	            while (k >= 0) {
+	                if (k in t) {
+	                    curr = accumulator.call(undefined, curr, t[k], k, t);
+	                }
+	                k--;
+	            }
+	            return curr;
+	        }
+
+
+	        function toArray(o) {
+	            var ret = [];
+	            if (o !== null) {
+	                var args = argsToArray(arguments);
+	                if (args.length === 1) {
+	                    if (isArray(o)) {
+	                        ret = o;
+	                    } else if (is.isHash(o)) {
+	                        for (var i in o) {
+	                            if (o.hasOwnProperty(i)) {
+	                                ret.push([i, o[i]]);
+	                            }
+	                        }
+	                    } else {
+	                        ret.push(o);
+	                    }
+	                } else {
+	                    forEach(args, function (a) {
+	                        ret = ret.concat(toArray(a));
+	                    });
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function sum(array) {
+	            array = array || [];
+	            if (array.length) {
+	                return reduce(array, function (a, b) {
+	                    return a + b;
+	                });
+	            } else {
+	                return 0;
+	            }
+	        }
+
+	        function avg(arr) {
+	            arr = arr || [];
+	            if (arr.length) {
+	                var total = sum(arr);
+	                if (is.isNumber(total)) {
+	                    return  total / arr.length;
+	                } else {
+	                    throw new Error("Cannot average an array of non numbers.");
+	                }
+	            } else {
+	                return 0;
+	            }
+	        }
+
+	        function sort(arr, cmp) {
+	            return _sort(arr, cmp);
+	        }
+
+	        function min(arr, cmp) {
+	            return _sort(arr, cmp)[0];
+	        }
+
+	        function max(arr, cmp) {
+	            return _sort(arr, cmp)[arr.length - 1];
+	        }
+
+	        function difference(arr1) {
+	            var ret = arr1, args = flatten(argsToArray(arguments, 1));
+	            if (isArray(arr1)) {
+	                ret = filter(arr1, function (a) {
+	                    return indexOf(args, a) === -1;
+	                });
+	            }
+	            return ret;
+	        }
+
+	        function removeDuplicates(arr) {
+	            var ret = [], i = -1, l, retLength = 0;
+	            if (arr) {
+	                l = arr.length;
+	                while (++i < l) {
+	                    var item = arr[i];
+	                    if (indexOf(ret, item) === -1) {
+	                        ret[retLength++] = item;
+	                    }
+	                }
+	            }
+	            return ret;
+	        }
+
+
+	        function unique(arr) {
+	            return removeDuplicates(arr);
+	        }
+
+
+	        function rotate(arr, numberOfTimes) {
+	            var ret = arr.slice();
+	            if (typeof numberOfTimes !== "number") {
+	                numberOfTimes = 1;
+	            }
+	            if (numberOfTimes && isArray(arr)) {
+	                if (numberOfTimes > 0) {
+	                    ret.push(ret.shift());
+	                    numberOfTimes--;
+	                } else {
+	                    ret.unshift(ret.pop());
+	                    numberOfTimes++;
+	                }
+	                return rotate(ret, numberOfTimes);
+	            } else {
+	                return ret;
+	            }
+	        }
+
+	        function permutations(arr, length) {
+	            var ret = [];
+	            if (isArray(arr)) {
+	                var copy = arr.slice(0);
+	                if (typeof length !== "number") {
+	                    length = arr.length;
+	                }
+	                if (!length) {
+	                    ret = [
+	                        []
+	                    ];
+	                } else if (length <= arr.length) {
+	                    ret = reduce(arr, function (a, b, i) {
+	                        var ret;
+	                        if (length > 1) {
+	                            ret = permute(b, rotate(copy, i).slice(1), length);
+	                        } else {
+	                            ret = [
+	                                [b]
+	                            ];
+	                        }
+	                        return a.concat(ret);
+	                    }, []);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function zip() {
+	            var ret = [];
+	            var arrs = argsToArray(arguments);
+	            if (arrs.length > 1) {
+	                var arr1 = arrs.shift();
+	                if (isArray(arr1)) {
+	                    ret = reduce(arr1, function (a, b, i) {
+	                        var curr = [b];
+	                        for (var j = 0; j < arrs.length; j++) {
+	                            var currArr = arrs[j];
+	                            if (isArray(currArr) && !is.isUndefined(currArr[i])) {
+	                                curr.push(currArr[i]);
+	                            } else {
+	                                curr.push(null);
+	                            }
+	                        }
+	                        a.push(curr);
+	                        return a;
+	                    }, []);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function transpose(arr) {
+	            var ret = [];
+	            if (isArray(arr) && arr.length) {
+	                var last;
+	                forEach(arr, function (a) {
+	                    if (isArray(a) && (!last || a.length === last.length)) {
+	                        forEach(a, function (b, i) {
+	                            if (!ret[i]) {
+	                                ret[i] = [];
+	                            }
+	                            ret[i].push(b);
+	                        });
+	                        last = a;
+	                    }
+	                });
+	            }
+	            return ret;
+	        }
+
+	        function valuesAt(arr, indexes) {
+	            var ret = [];
+	            indexes = argsToArray(arguments);
+	            arr = indexes.shift();
+	            if (isArray(arr) && indexes.length) {
+	                for (var i = 0, l = indexes.length; i < l; i++) {
+	                    ret.push(arr[indexes[i]] || null);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function union() {
+	            var ret = [];
+	            var arrs = argsToArray(arguments);
+	            if (arrs.length > 1) {
+	                for (var i = 0, l = arrs.length; i < l; i++) {
+	                    ret = ret.concat(arrs[i]);
+	                }
+	                ret = removeDuplicates(ret);
+	            }
+	            return ret;
+	        }
+
+	        function intersect() {
+	            var collect = [], sets, i = -1 , l;
+	            if (arguments.length > 1) {
+	                //assume we are intersections all the lists in the array
+	                sets = argsToArray(arguments);
+	            } else {
+	                sets = arguments[0];
+	            }
+	            if (isArray(sets)) {
+	                collect = sets[0];
+	                i = 0;
+	                l = sets.length;
+	                while (++i < l) {
+	                    collect = intersection(collect, sets[i]);
+	                }
+	            }
+	            return removeDuplicates(collect);
+	        }
+
+	        function powerSet(arr) {
+	            var ret = [];
+	            if (isArray(arr) && arr.length) {
+	                ret = reduce(arr, function (a, b) {
+	                    var ret = map(a, function (c) {
+	                        return c.concat(b);
+	                    });
+	                    return a.concat(ret);
+	                }, [
+	                    []
+	                ]);
+	            }
+	            return ret;
+	        }
+
+	        function cartesian(a, b) {
+	            var ret = [];
+	            if (isArray(a) && isArray(b) && a.length && b.length) {
+	                ret = cross(a[0], b).concat(cartesian(a.slice(1), b));
+	            }
+	            return ret;
+	        }
+
+	        function compact(arr) {
+	            var ret = [];
+	            if (isArray(arr) && arr.length) {
+	                ret = filter(arr, function (item) {
+	                    return !is.isUndefinedOrNull(item);
+	                });
+	            }
+	            return ret;
+	        }
+
+	        function multiply(arr, times) {
+	            times = is.isNumber(times) ? times : 1;
+	            if (!times) {
+	                //make sure times is greater than zero if it is zero then dont multiply it
+	                times = 1;
+	            }
+	            arr = toArray(arr || []);
+	            var ret = [], i = 0;
+	            while (++i <= times) {
+	                ret = ret.concat(arr);
+	            }
+	            return ret;
+	        }
+
+	        function flatten(arr) {
+	            var set;
+	            var args = argsToArray(arguments);
+	            if (args.length > 1) {
+	                //assume we are intersections all the lists in the array
+	                set = args;
+	            } else {
+	                set = toArray(arr);
+	            }
+	            return reduce(set, function (a, b) {
+	                return a.concat(b);
+	            }, []);
+	        }
+
+	        function pluck(arr, prop) {
+	            prop = prop.split(".");
+	            var result = arr.slice(0);
+	            forEach(prop, function (prop) {
+	                var exec = prop.match(/(\w+)\(\)$/);
+	                result = map(result, function (item) {
+	                    return exec ? item[exec[1]]() : item[prop];
+	                });
+	            });
+	            return result;
+	        }
+
+	        function invoke(arr, func, args) {
+	            args = argsToArray(arguments, 2);
+	            return map(arr, function (item) {
+	                var exec = isString(func) ? item[func] : func;
+	                return exec.apply(item, args);
+	            });
+	        }
+
+
+	        var array = {
+	            toArray: toArray,
+	            sum: sum,
+	            avg: avg,
+	            sort: sort,
+	            min: min,
+	            max: max,
+	            difference: difference,
+	            removeDuplicates: removeDuplicates,
+	            unique: unique,
+	            rotate: rotate,
+	            permutations: permutations,
+	            zip: zip,
+	            transpose: transpose,
+	            valuesAt: valuesAt,
+	            union: union,
+	            intersect: intersect,
+	            powerSet: powerSet,
+	            cartesian: cartesian,
+	            compact: compact,
+	            multiply: multiply,
+	            flatten: flatten,
+	            pluck: pluck,
+	            invoke: invoke,
+	            forEach: forEach,
+	            map: map,
+	            filter: filter,
+	            reduce: reduce,
+	            reduceRight: reduceRight,
+	            some: some,
+	            every: every,
+	            indexOf: indexOf,
+	            lastIndexOf: lastIndexOf
+	        };
+
+	        return extended.define(isArray, array).expose(array);
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineArray(__webpack_require__(33), __webpack_require__(32), __webpack_require__(40));
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended", "is-extended", "arguments-extended"], function (extended, is, args) {
+	            return defineArray(extended, is, args);
+	        });
+	    } else {
+	        this.arrayExtended = defineArray(this.extended, this.isExtended, this.argumentsExtended);
+	    }
+
+	}).call(this);
+
+
+
+
+
+
+
+
+/***/ },
+/* 40 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+
+	    function defineArgumentsExtended(extended, is) {
+
+	        var pSlice = Array.prototype.slice,
+	            isArguments = is.isArguments;
+
+	        function argsToArray(args, slice) {
+	            var i = -1, j = 0, l = args.length, ret = [];
+	            slice = slice || 0;
+	            i += slice;
+	            while (++i < l) {
+	                ret[j++] = args[i];
+	            }
+	            return ret;
+	        }
+
+
+	        return extended
+	            .define(isArguments, {
+	                toArray: argsToArray
+	            })
+	            .expose({
+	                argsToArray: argsToArray
+	            });
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineArgumentsExtended(__webpack_require__(33), __webpack_require__(32));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended", "is-extended"], function (extended, is) {
+	            return defineArgumentsExtended(extended, is);
+	        });
+	    } else {
+	        this.argumentsExtended = defineArgumentsExtended(this.extended, this.isExtended);
+	    }
+
+	}).call(this);
+
+
+
+/***/ },
+/* 41 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+
+	    function defineString(extended, is, date, arr) {
+
+	        var stringify;
+	        if (typeof JSON === "undefined") {
+	            /*
+	             json2.js
+	             2012-10-08
+
+	             Public Domain.
+
+	             NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
+	             */
+
+	            (function () {
+	                function f(n) {
+	                    // Format integers to have at least two digits.
+	                    return n < 10 ? '0' + n : n;
+	                }
+
+	                var isPrimitive = is.tester().isString().isNumber().isBoolean().tester();
+
+	                function toJSON(obj) {
+	                    if (is.isDate(obj)) {
+	                        return isFinite(obj.valueOf()) ? obj.getUTCFullYear() + '-' +
+	                            f(obj.getUTCMonth() + 1) + '-' +
+	                            f(obj.getUTCDate()) + 'T' +
+	                            f(obj.getUTCHours()) + ':' +
+	                            f(obj.getUTCMinutes()) + ':' +
+	                            f(obj.getUTCSeconds()) + 'Z'
+	                            : null;
+	                    } else if (isPrimitive(obj)) {
+	                        return obj.valueOf();
+	                    }
+	                    return obj;
+	                }
+
+	                var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+	                    escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+	                    gap,
+	                    indent,
+	                    meta = {    // table of character substitutions
+	                        '\b': '\\b',
+	                        '\t': '\\t',
+	                        '\n': '\\n',
+	                        '\f': '\\f',
+	                        '\r': '\\r',
+	                        '"': '\\"',
+	                        '\\': '\\\\'
+	                    },
+	                    rep;
+
+
+	                function quote(string) {
+	                    escapable.lastIndex = 0;
+	                    return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
+	                        var c = meta[a];
+	                        return typeof c === 'string' ? c : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+	                    }) + '"' : '"' + string + '"';
+	                }
+
+
+	                function str(key, holder) {
+
+	                    var i, k, v, length, mind = gap, partial, value = holder[key];
+	                    if (value) {
+	                        value = toJSON(value);
+	                    }
+	                    if (typeof rep === 'function') {
+	                        value = rep.call(holder, key, value);
+	                    }
+	                    switch (typeof value) {
+	                    case 'string':
+	                        return quote(value);
+	                    case 'number':
+	                        return isFinite(value) ? String(value) : 'null';
+	                    case 'boolean':
+	                    case 'null':
+	                        return String(value);
+	                    case 'object':
+	                        if (!value) {
+	                            return 'null';
+	                        }
+	                        gap += indent;
+	                        partial = [];
+	                        if (Object.prototype.toString.apply(value) === '[object Array]') {
+	                            length = value.length;
+	                            for (i = 0; i < length; i += 1) {
+	                                partial[i] = str(i, value) || 'null';
+	                            }
+	                            v = partial.length === 0 ? '[]' : gap ? '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']' : '[' + partial.join(',') + ']';
+	                            gap = mind;
+	                            return v;
+	                        }
+	                        if (rep && typeof rep === 'object') {
+	                            length = rep.length;
+	                            for (i = 0; i < length; i += 1) {
+	                                if (typeof rep[i] === 'string') {
+	                                    k = rep[i];
+	                                    v = str(k, value);
+	                                    if (v) {
+	                                        partial.push(quote(k) + (gap ? ': ' : ':') + v);
+	                                    }
+	                                }
+	                            }
+	                        } else {
+	                            for (k in value) {
+	                                if (Object.prototype.hasOwnProperty.call(value, k)) {
+	                                    v = str(k, value);
+	                                    if (v) {
+	                                        partial.push(quote(k) + (gap ? ': ' : ':') + v);
+	                                    }
+	                                }
+	                            }
+	                        }
+	                        v = partial.length === 0 ? '{}' : gap ? '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}' : '{' + partial.join(',') + '}';
+	                        gap = mind;
+	                        return v;
+	                    }
+	                }
+
+	                stringify = function (value, replacer, space) {
+	                    var i;
+	                    gap = '';
+	                    indent = '';
+	                    if (typeof space === 'number') {
+	                        for (i = 0; i < space; i += 1) {
+	                            indent += ' ';
+	                        }
+	                    } else if (typeof space === 'string') {
+	                        indent = space;
+	                    }
+	                    rep = replacer;
+	                    if (replacer && typeof replacer !== 'function' &&
+	                        (typeof replacer !== 'object' ||
+	                            typeof replacer.length !== 'number')) {
+	                        throw new Error('JSON.stringify');
+	                    }
+	                    return str('', {'': value});
+	                };
+	            }());
+	        } else {
+	            stringify = JSON.stringify;
+	        }
+
+
+	        var isHash = is.isHash, aSlice = Array.prototype.slice;
+
+	        var FORMAT_REGEX = /%((?:-?\+?.?\d*)?|(?:\[[^\[|\]]*\]))?([sjdDZ])/g;
+	        var INTERP_REGEX = /\{(?:\[([^\[|\]]*)\])?(\w+)\}/g;
+	        var STR_FORMAT = /(-?)(\+?)([A-Z|a-z|\W]?)([1-9][0-9]*)?$/;
+	        var OBJECT_FORMAT = /([1-9][0-9]*)$/g;
+
+	        function formatString(string, format) {
+	            var ret = string;
+	            if (STR_FORMAT.test(format)) {
+	                var match = format.match(STR_FORMAT);
+	                var isLeftJustified = match[1], padChar = match[3], width = match[4];
+	                if (width) {
+	                    width = parseInt(width, 10);
+	                    if (ret.length < width) {
+	                        ret = pad(ret, width, padChar, isLeftJustified);
+	                    } else {
+	                        ret = truncate(ret, width);
+	                    }
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function formatNumber(number, format) {
+	            var ret;
+	            if (is.isNumber(number)) {
+	                ret = "" + number;
+	                if (STR_FORMAT.test(format)) {
+	                    var match = format.match(STR_FORMAT);
+	                    var isLeftJustified = match[1], signed = match[2], padChar = match[3], width = match[4];
+	                    if (signed) {
+	                        ret = (number > 0 ? "+" : "") + ret;
+	                    }
+	                    if (width) {
+	                        width = parseInt(width, 10);
+	                        if (ret.length < width) {
+	                            ret = pad(ret, width, padChar || "0", isLeftJustified);
+	                        } else {
+	                            ret = truncate(ret, width);
+	                        }
+	                    }
+
+	                }
+	            } else {
+	                throw new Error("stringExtended.format : when using %d the parameter must be a number!");
+	            }
+	            return ret;
+	        }
+
+	        function formatObject(object, format) {
+	            var ret, match = format.match(OBJECT_FORMAT), spacing = 0;
+	            if (match) {
+	                spacing = parseInt(match[0], 10);
+	                if (isNaN(spacing)) {
+	                    spacing = 0;
+	                }
+	            }
+	            try {
+	                ret = stringify(object, null, spacing);
+	            } catch (e) {
+	                throw new Error("stringExtended.format : Unable to parse json from ", object);
+	            }
+	            return ret;
+	        }
+
+
+	        var styles = {
+	            //styles
+	            bold: 1,
+	            bright: 1,
+	            italic: 3,
+	            underline: 4,
+	            blink: 5,
+	            inverse: 7,
+	            crossedOut: 9,
+
+	            red: 31,
+	            green: 32,
+	            yellow: 33,
+	            blue: 34,
+	            magenta: 35,
+	            cyan: 36,
+	            white: 37,
+
+	            redBackground: 41,
+	            greenBackground: 42,
+	            yellowBackground: 43,
+	            blueBackground: 44,
+	            magentaBackground: 45,
+	            cyanBackground: 46,
+	            whiteBackground: 47,
+
+	            encircled: 52,
+	            overlined: 53,
+	            grey: 90,
+	            black: 90
+	        };
+
+	        var characters = {
+	            SMILEY: "☺",
+	            SOLID_SMILEY: "☻",
+	            HEART: "♥",
+	            DIAMOND: "♦",
+	            CLOVE: "♣",
+	            SPADE: "♠",
+	            DOT: "•",
+	            SQUARE_CIRCLE: "◘",
+	            CIRCLE: "○",
+	            FILLED_SQUARE_CIRCLE: "◙",
+	            MALE: "♂",
+	            FEMALE: "♀",
+	            EIGHT_NOTE: "♪",
+	            DOUBLE_EIGHTH_NOTE: "♫",
+	            SUN: "☼",
+	            PLAY: "►",
+	            REWIND: "◄",
+	            UP_DOWN: "↕",
+	            PILCROW: "¶",
+	            SECTION: "§",
+	            THICK_MINUS: "▬",
+	            SMALL_UP_DOWN: "↨",
+	            UP_ARROW: "↑",
+	            DOWN_ARROW: "↓",
+	            RIGHT_ARROW: "→",
+	            LEFT_ARROW: "←",
+	            RIGHT_ANGLE: "∟",
+	            LEFT_RIGHT_ARROW: "↔",
+	            TRIANGLE: "▲",
+	            DOWN_TRIANGLE: "▼",
+	            HOUSE: "⌂",
+	            C_CEDILLA: "Ç",
+	            U_UMLAUT: "ü",
+	            E_ACCENT: "é",
+	            A_LOWER_CIRCUMFLEX: "â",
+	            A_LOWER_UMLAUT: "ä",
+	            A_LOWER_GRAVE_ACCENT: "à",
+	            A_LOWER_CIRCLE_OVER: "å",
+	            C_LOWER_CIRCUMFLEX: "ç",
+	            E_LOWER_CIRCUMFLEX: "ê",
+	            E_LOWER_UMLAUT: "ë",
+	            E_LOWER_GRAVE_ACCENT: "è",
+	            I_LOWER_UMLAUT: "ï",
+	            I_LOWER_CIRCUMFLEX: "î",
+	            I_LOWER_GRAVE_ACCENT: "ì",
+	            A_UPPER_UMLAUT: "Ä",
+	            A_UPPER_CIRCLE: "Å",
+	            E_UPPER_ACCENT: "É",
+	            A_E_LOWER: "æ",
+	            A_E_UPPER: "Æ",
+	            O_LOWER_CIRCUMFLEX: "ô",
+	            O_LOWER_UMLAUT: "ö",
+	            O_LOWER_GRAVE_ACCENT: "ò",
+	            U_LOWER_CIRCUMFLEX: "û",
+	            U_LOWER_GRAVE_ACCENT: "ù",
+	            Y_LOWER_UMLAUT: "ÿ",
+	            O_UPPER_UMLAUT: "Ö",
+	            U_UPPER_UMLAUT: "Ü",
+	            CENTS: "¢",
+	            POUND: "£",
+	            YEN: "¥",
+	            CURRENCY: "¤",
+	            PTS: "₧",
+	            FUNCTION: "ƒ",
+	            A_LOWER_ACCENT: "á",
+	            I_LOWER_ACCENT: "í",
+	            O_LOWER_ACCENT: "ó",
+	            U_LOWER_ACCENT: "ú",
+	            N_LOWER_TILDE: "ñ",
+	            N_UPPER_TILDE: "Ñ",
+	            A_SUPER: "ª",
+	            O_SUPER: "º",
+	            UPSIDEDOWN_QUESTION: "¿",
+	            SIDEWAYS_L: "⌐",
+	            NEGATION: "¬",
+	            ONE_HALF: "½",
+	            ONE_FOURTH: "¼",
+	            UPSIDEDOWN_EXCLAMATION: "¡",
+	            DOUBLE_LEFT: "«",
+	            DOUBLE_RIGHT: "»",
+	            LIGHT_SHADED_BOX: "░",
+	            MEDIUM_SHADED_BOX: "▒",
+	            DARK_SHADED_BOX: "▓",
+	            VERTICAL_LINE: "│",
+	            MAZE__SINGLE_RIGHT_T: "┤",
+	            MAZE_SINGLE_RIGHT_TOP: "┐",
+	            MAZE_SINGLE_RIGHT_BOTTOM_SMALL: "┘",
+	            MAZE_SINGLE_LEFT_TOP_SMALL: "┌",
+	            MAZE_SINGLE_LEFT_BOTTOM_SMALL: "└",
+	            MAZE_SINGLE_LEFT_T: "├",
+	            MAZE_SINGLE_BOTTOM_T: "┴",
+	            MAZE_SINGLE_TOP_T: "┬",
+	            MAZE_SINGLE_CENTER: "┼",
+	            MAZE_SINGLE_HORIZONTAL_LINE: "─",
+	            MAZE_SINGLE_RIGHT_DOUBLECENTER_T: "╡",
+	            MAZE_SINGLE_RIGHT_DOUBLE_BL: "╛",
+	            MAZE_SINGLE_RIGHT_DOUBLE_T: "╢",
+	            MAZE_SINGLE_RIGHT_DOUBLEBOTTOM_TOP: "╖",
+	            MAZE_SINGLE_RIGHT_DOUBLELEFT_TOP: "╕",
+	            MAZE_SINGLE_LEFT_DOUBLE_T: "╞",
+	            MAZE_SINGLE_BOTTOM_DOUBLE_T: "╧",
+	            MAZE_SINGLE_TOP_DOUBLE_T: "╤",
+	            MAZE_SINGLE_TOP_DOUBLECENTER_T: "╥",
+	            MAZE_SINGLE_BOTTOM_DOUBLECENTER_T: "╨",
+	            MAZE_SINGLE_LEFT_DOUBLERIGHT_BOTTOM: "╘",
+	            MAZE_SINGLE_LEFT_DOUBLERIGHT_TOP: "╒",
+	            MAZE_SINGLE_LEFT_DOUBLEBOTTOM_TOP: "╓",
+	            MAZE_SINGLE_LEFT_DOUBLETOP_BOTTOM: "╙",
+	            MAZE_SINGLE_LEFT_TOP: "Γ",
+	            MAZE_SINGLE_RIGHT_BOTTOM: "╜",
+	            MAZE_SINGLE_LEFT_CENTER: "╟",
+	            MAZE_SINGLE_DOUBLECENTER_CENTER: "╫",
+	            MAZE_SINGLE_DOUBLECROSS_CENTER: "╪",
+	            MAZE_DOUBLE_LEFT_CENTER: "╣",
+	            MAZE_DOUBLE_VERTICAL: "║",
+	            MAZE_DOUBLE_RIGHT_TOP: "╗",
+	            MAZE_DOUBLE_RIGHT_BOTTOM: "╝",
+	            MAZE_DOUBLE_LEFT_BOTTOM: "╚",
+	            MAZE_DOUBLE_LEFT_TOP: "╔",
+	            MAZE_DOUBLE_BOTTOM_T: "╩",
+	            MAZE_DOUBLE_TOP_T: "╦",
+	            MAZE_DOUBLE_LEFT_T: "╠",
+	            MAZE_DOUBLE_HORIZONTAL: "═",
+	            MAZE_DOUBLE_CROSS: "╬",
+	            SOLID_RECTANGLE: "█",
+	            THICK_LEFT_VERTICAL: "▌",
+	            THICK_RIGHT_VERTICAL: "▐",
+	            SOLID_SMALL_RECTANGLE_BOTTOM: "▄",
+	            SOLID_SMALL_RECTANGLE_TOP: "▀",
+	            PHI_UPPER: "Φ",
+	            INFINITY: "∞",
+	            INTERSECTION: "∩",
+	            DEFINITION: "≡",
+	            PLUS_MINUS: "±",
+	            GT_EQ: "≥",
+	            LT_EQ: "≤",
+	            THEREFORE: "⌠",
+	            SINCE: "∵",
+	            DOESNOT_EXIST: "∄",
+	            EXISTS: "∃",
+	            FOR_ALL: "∀",
+	            EXCLUSIVE_OR: "⊕",
+	            BECAUSE: "⌡",
+	            DIVIDE: "÷",
+	            APPROX: "≈",
+	            DEGREE: "°",
+	            BOLD_DOT: "∙",
+	            DOT_SMALL: "·",
+	            CHECK: "√",
+	            ITALIC_X: "✗",
+	            SUPER_N: "ⁿ",
+	            SQUARED: "²",
+	            CUBED: "³",
+	            SOLID_BOX: "■",
+	            PERMILE: "‰",
+	            REGISTERED_TM: "®",
+	            COPYRIGHT: "©",
+	            TRADEMARK: "™",
+	            BETA: "β",
+	            GAMMA: "γ",
+	            ZETA: "ζ",
+	            ETA: "η",
+	            IOTA: "ι",
+	            KAPPA: "κ",
+	            LAMBDA: "λ",
+	            NU: "ν",
+	            XI: "ξ",
+	            OMICRON: "ο",
+	            RHO: "ρ",
+	            UPSILON: "υ",
+	            CHI_LOWER: "φ",
+	            CHI_UPPER: "χ",
+	            PSI: "ψ",
+	            ALPHA: "α",
+	            ESZETT: "ß",
+	            PI: "π",
+	            SIGMA_UPPER: "Σ",
+	            SIGMA_LOWER: "σ",
+	            MU: "µ",
+	            TAU: "τ",
+	            THETA: "Θ",
+	            OMEGA: "Ω",
+	            DELTA: "δ",
+	            PHI_LOWER: "φ",
+	            EPSILON: "ε"
+	        };
+
+	        function pad(string, length, ch, end) {
+	            string = "" + string; //check for numbers
+	            ch = ch || " ";
+	            var strLen = string.length;
+	            while (strLen < length) {
+	                if (end) {
+	                    string += ch;
+	                } else {
+	                    string = ch + string;
+	                }
+	                strLen++;
+	            }
+	            return string;
+	        }
+
+	        function truncate(string, length, end) {
+	            var ret = string;
+	            if (is.isString(ret)) {
+	                if (string.length > length) {
+	                    if (end) {
+	                        var l = string.length;
+	                        ret = string.substring(l - length, l);
+	                    } else {
+	                        ret = string.substring(0, length);
+	                    }
+	                }
+	            } else {
+	                ret = truncate("" + ret, length);
+	            }
+	            return ret;
+	        }
+
+	        function format(str, obj) {
+	            if (obj instanceof Array) {
+	                var i = 0, len = obj.length;
+	                //find the matches
+	                return str.replace(FORMAT_REGEX, function (m, format, type) {
+	                    var replacer, ret;
+	                    if (i < len) {
+	                        replacer = obj[i++];
+	                    } else {
+	                        //we are out of things to replace with so
+	                        //just return the match?
+	                        return m;
+	                    }
+	                    if (m === "%s" || m === "%d" || m === "%D") {
+	                        //fast path!
+	                        ret = replacer + "";
+	                    } else if (m === "%Z") {
+	                        ret = replacer.toUTCString();
+	                    } else if (m === "%j") {
+	                        try {
+	                            ret = stringify(replacer);
+	                        } catch (e) {
+	                            throw new Error("stringExtended.format : Unable to parse json from ", replacer);
+	                        }
+	                    } else {
+	                        format = format.replace(/^\[|\]$/g, "");
+	                        switch (type) {
+	                        case "s":
+	                            ret = formatString(replacer, format);
+	                            break;
+	                        case "d":
+	                            ret = formatNumber(replacer, format);
+	                            break;
+	                        case "j":
+	                            ret = formatObject(replacer, format);
+	                            break;
+	                        case "D":
+	                            ret = date.format(replacer, format);
+	                            break;
+	                        case "Z":
+	                            ret = date.format(replacer, format, true);
+	                            break;
+	                        }
+	                    }
+	                    return ret;
+	                });
+	            } else if (isHash(obj)) {
+	                return str.replace(INTERP_REGEX, function (m, format, value) {
+	                    value = obj[value];
+	                    if (!is.isUndefined(value)) {
+	                        if (format) {
+	                            if (is.isString(value)) {
+	                                return formatString(value, format);
+	                            } else if (is.isNumber(value)) {
+	                                return formatNumber(value, format);
+	                            } else if (is.isDate(value)) {
+	                                return date.format(value, format);
+	                            } else if (is.isObject(value)) {
+	                                return formatObject(value, format);
+	                            }
+	                        } else {
+	                            return "" + value;
+	                        }
+	                    }
+	                    return m;
+	                });
+	            } else {
+	                var args = aSlice.call(arguments).slice(1);
+	                return format(str, args);
+	            }
+	        }
+
+	        function toArray(testStr, delim) {
+	            var ret = [];
+	            if (testStr) {
+	                if (testStr.indexOf(delim) > 0) {
+	                    ret = testStr.replace(/\s+/g, "").split(delim);
+	                }
+	                else {
+	                    ret.push(testStr);
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function multiply(str, times) {
+	            var ret = [];
+	            if (times) {
+	                for (var i = 0; i < times; i++) {
+	                    ret.push(str);
+	                }
+	            }
+	            return ret.join("");
+	        }
+
+
+	        function style(str, options) {
+	            var ret, i, l;
+	            if (options) {
+	                if (is.isArray(str)) {
+	                    ret = [];
+	                    for (i = 0, l = str.length; i < l; i++) {
+	                        ret.push(style(str[i], options));
+	                    }
+	                } else if (options instanceof Array) {
+	                    ret = str;
+	                    for (i = 0, l = options.length; i < l; i++) {
+	                        ret = style(ret, options[i]);
+	                    }
+	                } else if (options in styles) {
+	                    ret = '\x1B[' + styles[options] + 'm' + str + '\x1B[0m';
+	                }
+	            }
+	            return ret;
+	        }
+
+	        function escape(str, except) {
+	            return str.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, function (ch) {
+	                if (except && arr.indexOf(except, ch) !== -1) {
+	                    return ch;
+	                }
+	                return "\\" + ch;
+	            });
+	        }
+
+	        function trim(str) {
+	            return str.replace(/^\s*|\s*$/g, "");
+	        }
+
+	        function trimLeft(str) {
+	            return str.replace(/^\s*/, "");
+	        }
+
+	        function trimRight(str) {
+	            return str.replace(/\s*$/, "");
+	        }
+
+	        function isEmpty(str) {
+	            return str.length === 0;
+	        }
+
+
+	        var string = {
+	            toArray: toArray,
+	            pad: pad,
+	            truncate: truncate,
+	            multiply: multiply,
+	            format: format,
+	            style: style,
+	            escape: escape,
+	            trim: trim,
+	            trimLeft: trimLeft,
+	            trimRight: trimRight,
+	            isEmpty: isEmpty
+	        };
+	        return extended.define(is.isString, string).define(is.isArray, {style: style}).expose(string).expose({characters: characters});
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineString(__webpack_require__(33), __webpack_require__(32), __webpack_require__(42), __webpack_require__(39));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended", "is-extended", "date-extended", "array-extended"], function (extended, is, date, arr) {
+	            return defineString(extended, is, date, arr);
+	        });
+	    } else {
+	        this.stringExtended = defineString(this.extended, this.isExtended, this.dateExtended, this.arrayExtended);
+	    }
+
+	}).call(this);
+
+
+
+
+
+
+
+
+/***/ },
+/* 42 */
+/***/ function(module, exports, __webpack_require__) {
+
+	(function () {
+	    "use strict";
+
+	    function defineDate(extended, is, array) {
+
+	        function _pad(string, length, ch, end) {
+	            string = "" + string; //check for numbers
+	            ch = ch || " ";
+	            var strLen = string.length;
+	            while (strLen < length) {
+	                if (end) {
+	                    string += ch;
+	                } else {
+	                    string = ch + string;
+	                }
+	                strLen++;
+	            }
+	            return string;
+	        }
+
+	        function _truncate(string, length, end) {
+	            var ret = string;
+	            if (is.isString(ret)) {
+	                if (string.length > length) {
+	                    if (end) {
+	                        var l = string.length;
+	                        ret = string.substring(l - length, l);
+	                    } else {
+	                        ret = string.substring(0, length);
+	                    }
+	                }
+	            } else {
+	                ret = _truncate("" + ret, length);
+	            }
+	            return ret;
+	        }
+
+	        function every(arr, iterator, scope) {
+	            if (!is.isArray(arr) || typeof iterator !== "function") {
+	                throw new TypeError();
+	            }
+	            var t = Object(arr);
+	            var len = t.length >>> 0;
+	            for (var i = 0; i < len; i++) {
+	                if (i in t && !iterator.call(scope, t[i], i, t)) {
+	                    return false;
+	                }
+	            }
+	            return true;
+	        }
+
+
+	        var transforms = (function () {
+	                var floor = Math.floor, round = Math.round;
+
+	                var addMap = {
+	                    day: function addDay(date, amount) {
+	                        return [amount, "Date", false];
+	                    },
+	                    weekday: function addWeekday(date, amount) {
+	                        // Divide the increment time span into weekspans plus leftover days
+	                        // e.g., 8 days is one 5-day weekspan / and two leftover days
+	                        // Can't have zero leftover days, so numbers divisible by 5 get
+	                        // a days value of 5, and the remaining days make up the number of weeks
+	                        var days, weeks, mod = amount % 5, strt = date.getDay(), adj = 0;
+	                        if (!mod) {
+	                            days = (amount > 0) ? 5 : -5;
+	                            weeks = (amount > 0) ? ((amount - 5) / 5) : ((amount + 5) / 5);
+	                        } else {
+	                            days = mod;
+	                            weeks = parseInt(amount / 5, 10);
+	                        }
+	                        if (strt === 6 && amount > 0) {
+	                            adj = 1;
+	                        } else if (strt === 0 && amount < 0) {
+	                            // Orig date is Sun / negative increment
+	                            // Jump back over Sat
+	                            adj = -1;
+	                        }
+	                        // Get weekday val for the new date
+	                        var trgt = strt + days;
+	                        // New date is on Sat or Sun
+	                        if (trgt === 0 || trgt === 6) {
+	                            adj = (amount > 0) ? 2 : -2;
+	                        }
+	                        // Increment by number of weeks plus leftover days plus
+	                        // weekend adjustments
+	                        return [(7 * weeks) + days + adj, "Date", false];
+	                    },
+	                    year: function addYear(date, amount) {
+	                        return [amount, "FullYear", true];
+	                    },
+	                    week: function addWeek(date, amount) {
+	                        return [amount * 7, "Date", false];
+	                    },
+	                    quarter: function addYear(date, amount) {
+	                        return [amount * 3, "Month", true];
+	                    },
+	                    month: function addYear(date, amount) {
+	                        return [amount, "Month", true];
+	                    }
+	                };
+
+	                function addTransform(interval, date, amount) {
+	                    interval = interval.replace(/s$/, "");
+	                    if (addMap.hasOwnProperty(interval)) {
+	                        return addMap[interval](date, amount);
+	                    }
+	                    return [amount, "UTC" + interval.charAt(0).toUpperCase() + interval.substring(1) + "s", false];
+	                }
+
+
+	                var differenceMap = {
+	                    "quarter": function quarterDifference(date1, date2, utc) {
+	                        var yearDiff = date2.getFullYear() - date1.getFullYear();
+	                        var m1 = date1[utc ? "getUTCMonth" : "getMonth"]();
+	                        var m2 = date2[utc ? "getUTCMonth" : "getMonth"]();
+	                        // Figure out which quarter the months are in
+	                        var q1 = floor(m1 / 3) + 1;
+	                        var q2 = floor(m2 / 3) + 1;
+	                        // Add quarters for any year difference between the dates
+	                        q2 += (yearDiff * 4);
+	                        return q2 - q1;
+	                    },
+
+	                    "weekday": function weekdayDifference(date1, date2, utc) {
+	                        var days = differenceTransform("day", date1, date2, utc), weeks;
+	                        var mod = days % 7;
+	                        // Even number of weeks
+	                        if (mod === 0) {
+	                            days = differenceTransform("week", date1, date2, utc) * 5;
+	                        } else {
+	                            // Weeks plus spare change (< 7 days)
+	                            var adj = 0, aDay = date1[utc ? "getUTCDay" : "getDay"](), bDay = date2[utc ? "getUTCDay" : "getDay"]();
+	                            weeks = parseInt(days / 7, 10);
+	                            // Mark the date advanced by the number of
+	                            // round weeks (may be zero)
+	                            var dtMark = new Date(+date1);
+	                            dtMark.setDate(dtMark[utc ? "getUTCDate" : "getDate"]() + (weeks * 7));
+	                            var dayMark = dtMark[utc ? "getUTCDay" : "getDay"]();
+
+	                            // Spare change days -- 6 or less
+	                            if (days > 0) {
+	                                if (aDay === 6 || bDay === 6) {
+	                                    adj = -1;
+	                                } else if (aDay === 0) {
+	                                    adj = 0;
+	                                } else if (bDay === 0 || (dayMark + mod) > 5) {
+	                                    adj = -2;
+	                                }
+	                            } else if (days < 0) {
+	                                if (aDay === 6) {
+	                                    adj = 0;
+	                                } else if (aDay === 0 || bDay === 0) {
+	                                    adj = 1;
+	                                } else if (bDay === 6 || (dayMark + mod) < 0) {
+	                                    adj = 2;
+	                                }
+	                            }
+	                            days += adj;
+	                            days -= (weeks * 2);
+	                        }
+	                        return days;
+	                    },
+	                    year: function (date1, date2) {
+	                        return date2.getFullYear() - date1.getFullYear();
+	                    },
+	                    month: function (date1, date2, utc) {
+	                        var m1 = date1[utc ? "getUTCMonth" : "getMonth"]();
+	                        var m2 = date2[utc ? "getUTCMonth" : "getMonth"]();
+	                        return (m2 - m1) + ((date2.getFullYear() - date1.getFullYear()) * 12);
+	                    },
+	                    week: function (date1, date2, utc) {
+	                        return round(differenceTransform("day", date1, date2, utc) / 7);
+	                    },
+	                    day: function (date1, date2) {
+	                        return 1.1574074074074074e-8 * (date2.getTime() - date1.getTime());
+	                    },
+	                    hour: function (date1, date2) {
+	                        return 2.7777777777777776e-7 * (date2.getTime() - date1.getTime());
+	                    },
+	                    minute: function (date1, date2) {
+	                        return 0.000016666666666666667 * (date2.getTime() - date1.getTime());
+	                    },
+	                    second: function (date1, date2) {
+	                        return 0.001 * (date2.getTime() - date1.getTime());
+	                    },
+	                    millisecond: function (date1, date2) {
+	                        return date2.getTime() - date1.getTime();
+	                    }
+	                };
+
+
+	                function differenceTransform(interval, date1, date2, utc) {
+	                    interval = interval.replace(/s$/, "");
+	                    return round(differenceMap[interval](date1, date2, utc));
+	                }
+
+
+	                return {
+	                    addTransform: addTransform,
+	                    differenceTransform: differenceTransform
+	                };
+	            }()),
+	            addTransform = transforms.addTransform,
+	            differenceTransform = transforms.differenceTransform;
+
+
+	        /**
+	         * @ignore
+	         * Based on DOJO Date Implementation
+	         *
+	         * Dojo is available under *either* the terms of the modified BSD license *or* the
+	         * Academic Free License version 2.1. As a recipient of Dojo, you may choose which
+	         * license to receive this code under (except as noted in per-module LICENSE
+	         * files). Some modules may not be the copyright of the Dojo Foundation. These
+	         * modules contain explicit declarations of copyright in both the LICENSE files in
+	         * the directories in which they reside and in the code itself. No external
+	         * contributions are allowed under licenses which are fundamentally incompatible
+	         * with the AFL or BSD licenses that Dojo is distributed under.
+	         *
+	         */
+
+	        var floor = Math.floor, round = Math.round, min = Math.min, pow = Math.pow, ceil = Math.ceil, abs = Math.abs;
+	        var monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+	        var monthAbbr = ["Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."];
+	        var dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+	        var dayAbbr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+	        var eraNames = ["Before Christ", "Anno Domini"];
+	        var eraAbbr = ["BC", "AD"];
+
+
+	        function getDayOfYear(/*Date*/dateObject, utc) {
+	            // summary: gets the day of the year as represented by dateObject
+	            return date.difference(new Date(dateObject.getFullYear(), 0, 1, dateObject.getHours()), dateObject, null, utc) + 1; // Number
+	        }
+
+	        function getWeekOfYear(/*Date*/dateObject, /*Number*/firstDayOfWeek, utc) {
+	            firstDayOfWeek = firstDayOfWeek || 0;
+	            var fullYear = dateObject[utc ? "getUTCFullYear" : "getFullYear"]();
+	            var firstDayOfYear = new Date(fullYear, 0, 1).getDay(),
+	                adj = (firstDayOfYear - firstDayOfWeek + 7) % 7,
+	                week = floor((getDayOfYear(dateObject) + adj - 1) / 7);
+
+	            // if year starts on the specified day, start counting weeks at 1
+	            if (firstDayOfYear === firstDayOfWeek) {
+	                week++;
+	            }
+
+	            return week; // Number
+	        }
+
+	        function getTimezoneName(/*Date*/dateObject) {
+	            var str = dateObject.toString();
+	            var tz = '';
+	            var pos = str.indexOf('(');
+	            if (pos > -1) {
+	                tz = str.substring(++pos, str.indexOf(')'));
+	            }
+	            return tz; // String
+	        }
+
+
+	        function buildDateEXP(pattern, tokens) {
+	            return pattern.replace(/([a-z])\1*/ig,function (match) {
+	                // Build a simple regexp.  Avoid captures, which would ruin the tokens list
+	                var s,
+	                    c = match.charAt(0),
+	                    l = match.length,
+	                    p2 = '0?',
+	                    p3 = '0{0,2}';
+	                if (c === 'y') {
+	                    s = '\\d{2,4}';
+	                } else if (c === "M") {
+	                    s = (l > 2) ? '\\S+?' : '1[0-2]|' + p2 + '[1-9]';
+	                } else if (c === "D") {
+	                    s = '[12][0-9][0-9]|3[0-5][0-9]|36[0-6]|' + p3 + '[1-9][0-9]|' + p2 + '[1-9]';
+	                } else if (c === "d") {
+	                    s = '3[01]|[12]\\d|' + p2 + '[1-9]';
+	                } else if (c === "w") {
+	                    s = '[1-4][0-9]|5[0-3]|' + p2 + '[1-9]';
+	                } else if (c === "E") {
+	                    s = '\\S+';
+	                } else if (c === "h") {
+	                    s = '1[0-2]|' + p2 + '[1-9]';
+	                } else if (c === "K") {
+	                    s = '1[01]|' + p2 + '\\d';
+	                } else if (c === "H") {
+	                    s = '1\\d|2[0-3]|' + p2 + '\\d';
+	                } else if (c === "k") {
+	                    s = '1\\d|2[0-4]|' + p2 + '[1-9]';
+	                } else if (c === "m" || c === "s") {
+	                    s = '[0-5]\\d';
+	                } else if (c === "S") {
+	                    s = '\\d{' + l + '}';
+	                } else if (c === "a") {
+	                    var am = 'AM', pm = 'PM';
+	                    s = am + '|' + pm;
+	                    if (am !== am.toLowerCase()) {
+	                        s += '|' + am.toLowerCase();
+	                    }
+	                    if (pm !== pm.toLowerCase()) {
+	                        s += '|' + pm.toLowerCase();
+	                    }
+	                    s = s.replace(/\./g, "\\.");
+	                } else if (c === 'v' || c === 'z' || c === 'Z' || c === 'G' || c === 'q' || c === 'Q') {
+	                    s = ".*";
+	                } else {
+	                    s = c === " " ? "\\s*" : c + "*";
+	                }
+	                if (tokens) {
+	                    tokens.push(match);
+	                }
+
+	                return "(" + s + ")"; // add capture
+	            }).replace(/[\xa0 ]/g, "[\\s\\xa0]"); // normalize whitespace.  Need explicit handling of \xa0 for IE.
+	        }
+
+
+	        /**
+	         * @namespace Utilities for Dates
+	         */
+	        var date = {
+
+	            /**@lends date*/
+
+	            /**
+	             * Returns the number of days in the month of a date
+	             *
+	             * @example
+	             *
+	             *  dateExtender.getDaysInMonth(new Date(2006, 1, 1)); //28
+	             *  dateExtender.getDaysInMonth(new Date(2004, 1, 1)); //29
+	             *  dateExtender.getDaysInMonth(new Date(2006, 2, 1)); //31
+	             *  dateExtender.getDaysInMonth(new Date(2006, 3, 1)); //30
+	             *  dateExtender.getDaysInMonth(new Date(2006, 4, 1)); //31
+	             *  dateExtender.getDaysInMonth(new Date(2006, 5, 1)); //30
+	             *  dateExtender.getDaysInMonth(new Date(2006, 6, 1)); //31
+	             * @param {Date} dateObject the date containing the month
+	             * @return {Number} the number of days in the month
+	             */
+	            getDaysInMonth: function (/*Date*/dateObject) {
+	                //	summary:
+	                //		Returns the number of days in the month used by dateObject
+	                var month = dateObject.getMonth();
+	                var days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+	                if (month === 1 && date.isLeapYear(dateObject)) {
+	                    return 29;
+	                } // Number
+	                return days[month]; // Number
+	            },
+
+	            /**
+	             * Determines if a date is a leap year
+	             *
+	             * @example
+	             *
+	             *  dateExtender.isLeapYear(new Date(1600, 0, 1)); //true
+	             *  dateExtender.isLeapYear(new Date(2004, 0, 1)); //true
+	             *  dateExtender.isLeapYear(new Date(2000, 0, 1)); //true
+	             *  dateExtender.isLeapYear(new Date(2006, 0, 1)); //false
+	             *  dateExtender.isLeapYear(new Date(1900, 0, 1)); //false
+	             *  dateExtender.isLeapYear(new Date(1800, 0, 1)); //false
+	             *  dateExtender.isLeapYear(new Date(1700, 0, 1)); //false
+	             *
+	             * @param {Date} dateObject
+	             * @returns {Boolean} true if it is a leap year false otherwise
+	             */
+	            isLeapYear: function (/*Date*/dateObject, utc) {
+	                var year = dateObject[utc ? "getUTCFullYear" : "getFullYear"]();
+	                return (year % 400 === 0) || (year % 4 === 0 && year % 100 !== 0);
+
+	            },
+
+	            /**
+	             * Determines if a date is on a weekend
+	             *
+	             * @example
+	             *
+	             * var thursday = new Date(2006, 8, 21);
+	             * var saturday = new Date(2006, 8, 23);
+	             * var sunday = new Date(2006, 8, 24);
+	             * var monday = new Date(2006, 8, 25);
+	             * dateExtender.isWeekend(thursday)); //false
+	             * dateExtender.isWeekend(saturday); //true
+	             * dateExtender.isWeekend(sunday); //true
+	             * dateExtender.isWeekend(monday)); //false
+	             *
+	             * @param {Date} dateObject the date to test
+	             *
+	             * @returns {Boolean} true if the date is a weekend
+	             */
+	            isWeekend: function (/*Date?*/dateObject, utc) {
+	                // summary:
+	                //	Determines if the date falls on a weekend, according to local custom.
+	                var day = (dateObject || new Date())[utc ? "getUTCDay" : "getDay"]();
+	                return day === 0 || day === 6;
+	            },
+
+	            /**
+	             * Get the timezone of a date
+	             *
+	             * @example
+	             *  //just setting the strLocal to simulate the toString() of a date
+	             *  dt.str = 'Sun Sep 17 2006 22:25:51 GMT-0500 (CDT)';
+	             *  //just setting the strLocal to simulate the locale
+	             *  dt.strLocale = 'Sun 17 Sep 2006 10:25:51 PM CDT';
+	             *  dateExtender.getTimezoneName(dt); //'CDT'
+	             *  dt.str = 'Sun Sep 17 2006 22:57:18 GMT-0500 (CDT)';
+	             *  dt.strLocale = 'Sun Sep 17 22:57:18 2006';
+	             *  dateExtender.getTimezoneName(dt); //'CDT'
+	             * @param dateObject the date to get the timezone from
+	             *
+	             * @returns {String} the timezone of the date
+	             */
+	            getTimezoneName: getTimezoneName,
+
+	            /**
+	             * Compares two dates
+	             *
+	             * @example
+	             *
+	             * var d1 = new Date();
+	             * d1.setHours(0);
+	             * dateExtender.compare(d1, d1); // 0
+	             *
+	             *  var d1 = new Date();
+	             *  d1.setHours(0);
+	             *  var d2 = new Date();
+	             *  d2.setFullYear(2005);
+	             *  d2.setHours(12);
+	             *  dateExtender.compare(d1, d2, "date"); // 1
+	             *  dateExtender.compare(d1, d2, "datetime"); // 1
+	             *
+	             *  var d1 = new Date();
+	             *  d1.setHours(0);
+	             *  var d2 = new Date();
+	             *  d2.setFullYear(2005);
+	             *  d2.setHours(12);
+	             *  dateExtender.compare(d2, d1, "date"); // -1
+	             *  dateExtender.compare(d1, d2, "time"); //-1
+	             *
+	             * @param {Date|String} date1 the date to comapare
+	             * @param {Date|String} [date2=new Date()] the date to compare date1 againse
+	             * @param {"date"|"time"|"datetime"} portion compares the portion specified
+	             *
+	             * @returns -1 if date1 is < date2 0 if date1 === date2  1 if date1 > date2
+	             */
+	            compare: function (/*Date*/date1, /*Date*/date2, /*String*/portion) {
+	                date1 = new Date(+date1);
+	                date2 = new Date(+(date2 || new Date()));
+
+	                if (portion === "date") {
+	                    // Ignore times and compare dates.
+	                    date1.setHours(0, 0, 0, 0);
+	                    date2.setHours(0, 0, 0, 0);
+	                } else if (portion === "time") {
+	                    // Ignore dates and compare times.
+	                    date1.setFullYear(0, 0, 0);
+	                    date2.setFullYear(0, 0, 0);
+	                }
+	                return date1 > date2 ? 1 : date1 < date2 ? -1 : 0;
+	            },
+
+
+	            /**
+	             * Adds a specified interval and amount to a date
+	             *
+	             * @example
+	             *  var dtA = new Date(2005, 11, 27);
+	             *  dateExtender.add(dtA, "year", 1); //new Date(2006, 11, 27);
+	             *  dateExtender.add(dtA, "years", 1); //new Date(2006, 11, 27);
+	             *
+	             *  dtA = new Date(2000, 0, 1);
+	             *  dateExtender.add(dtA, "quarter", 1); //new Date(2000, 3, 1);
+	             *  dateExtender.add(dtA, "quarters", 1); //new Date(2000, 3, 1);
+	             *
+	             *  dtA = new Date(2000, 0, 1);
+	             *  dateExtender.add(dtA, "month", 1); //new Date(2000, 1, 1);
+	             *  dateExtender.add(dtA, "months", 1); //new Date(2000, 1, 1);
+	             *
+	             *  dtA = new Date(2000, 0, 31);
+	             *  dateExtender.add(dtA, "month", 1); //new Date(2000, 1, 29);
+	             *  dateExtender.add(dtA, "months", 1); //new Date(2000, 1, 29);
+	             *
+	             *  dtA = new Date(2000, 0, 1);
+	             *  dateExtender.add(dtA, "week", 1); //new Date(2000, 0, 8);
+	             *  dateExtender.add(dtA, "weeks", 1); //new Date(2000, 0, 8);
+	             *
+	             *  dtA = new Date(2000, 0, 1);
+	             *  dateExtender.add(dtA, "day", 1); //new Date(2000, 0, 2);
+	             *
+	             *  dtA = new Date(2000, 0, 1);
+	             *  dateExtender.add(dtA, "weekday", 1); //new Date(2000, 0, 3);
+	             *
+	             *  dtA = new Date(2000, 0, 1, 11);
+	             *  dateExtender.add(dtA, "hour", 1); //new Date(2000, 0, 1, 12);
+	             *
+	             *  dtA = new Date(2000, 11, 31, 23, 59);
+	             *  dateExtender.add(dtA, "minute", 1); //new Date(2001, 0, 1, 0, 0);
+	             *
+	             *  dtA = new Date(2000, 11, 31, 23, 59, 59);
+	             *  dateExtender.add(dtA, "second", 1); //new Date(2001, 0, 1, 0, 0, 0);
+	             *
+	             *  dtA = new Date(2000, 11, 31, 23, 59, 59, 999);
+	             *  dateExtender.add(dtA, "millisecond", 1); //new Date(2001, 0, 1, 0, 0, 0, 0);
+	             *
+	             * @param {Date} date
+	             * @param {String} interval the interval to add
+	             *  <ul>
+	             *      <li>day | days</li>
+	             *      <li>weekday | weekdays</li>
+	             *      <li>year | years</li>
+	             *      <li>week | weeks</li>
+	             *      <li>quarter | quarters</li>
+	             *      <li>months | months</li>
+	             *      <li>hour | hours</li>
+	             *      <li>minute | minutes</li>
+	             *      <li>second | seconds</li>
+	             *      <li>millisecond | milliseconds</li>
+	             *  </ul>
+	             * @param {Number} [amount=0] the amount to add
+	             */
+	            add: function (/*Date*/date, /*String*/interval, /*int*/amount) {
+	                var res = addTransform(interval, date, amount || 0);
+	                amount = res[0];
+	                var property = res[1];
+	                var sum = new Date(+date);
+	                var fixOvershoot = res[2];
+	                if (property) {
+	                    sum["set" + property](sum["get" + property]() + amount);
+	                }
+
+	                if (fixOvershoot && (sum.getDate() < date.getDate())) {
+	                    sum.setDate(0);
+	                }
+
+	                return sum; // Date
+	            },
+
+	            /**
+	             * Finds the difference between two dates based on the specified interval
+	             *
+	             * @example
+	             *
+	             * var dtA, dtB;
+	             *
+	             * dtA = new Date(2005, 11, 27);
+	             * dtB = new Date(2006, 11, 27);
+	             * dateExtender.difference(dtA, dtB, "year"); //1
+	             *
+	             * dtA = new Date(2000, 1, 29);
+	             * dtB = new Date(2001, 2, 1);
+	             * dateExtender.difference(dtA, dtB, "quarter"); //4
+	             * dateExtender.difference(dtA, dtB, "month"); //13
+	             *
+	             * dtA = new Date(2000, 1, 1);
+	             * dtB = new Date(2000, 1, 8);
+	             * dateExtender.difference(dtA, dtB, "week"); //1
+	             *
+	             * dtA = new Date(2000, 1, 29);
+	             * dtB = new Date(2000, 2, 1);
+	             * dateExtender.difference(dtA, dtB, "day"); //1
+	             *
+	             * dtA = new Date(2006, 7, 3);
+	             * dtB = new Date(2006, 7, 11);
+	             * dateExtender.difference(dtA, dtB, "weekday"); //6
+	             *
+	             * dtA = new Date(2000, 11, 31, 23);
+	             * dtB = new Date(2001, 0, 1, 0);
+	             * dateExtender.difference(dtA, dtB, "hour"); //1
+	             *
+	             * dtA = new Date(2000, 11, 31, 23, 59);
+	             * dtB = new Date(2001, 0, 1, 0, 0);
+	             * dateExtender.difference(dtA, dtB, "minute"); //1
+	             *
+	             * dtA = new Date(2000, 11, 31, 23, 59, 59);
+	             * dtB = new Date(2001, 0, 1, 0, 0, 0);
+	             * dateExtender.difference(dtA, dtB, "second"); //1
+	             *
+	             * dtA = new Date(2000, 11, 31, 23, 59, 59, 999);
+	             * dtB = new Date(2001, 0, 1, 0, 0, 0, 0);
+	             * dateExtender.difference(dtA, dtB, "millisecond"); //1
+	             *
+	             *
+	             * @param {Date} date1
+	             * @param {Date} [date2 = new Date()]
+	             * @param {String} [interval = "day"] the intercal to find the difference of.
+	             *   <ul>
+	             *      <li>day | days</li>
+	             *      <li>weekday | weekdays</li>
+	             *      <li>year | years</li>
+	             *      <li>week | weeks</li>
+	             *      <li>quarter | quarters</li>
+	             *      <li>months | months</li>
+	             *      <li>hour | hours</li>
+	             *      <li>minute | minutes</li>
+	             *      <li>second | seconds</li>
+	             *      <li>millisecond | milliseconds</li>
+	             *  </ul>
+	             */
+	            difference: function (/*Date*/date1, /*Date?*/date2, /*String*/interval, utc) {
+	                date2 = date2 || new Date();
+	                interval = interval || "day";
+	                return differenceTransform(interval, date1, date2, utc);
+	            },
+
+	            /**
+	             * Formats a date to the specidifed format string
+	             *
+	             * @example
+	             *
+	             * var date = new Date(2006, 7, 11, 0, 55, 12, 345);
+	             * dateExtender.format(date, "EEEE, MMMM dd, yyyy"); //"Friday, August 11, 2006"
+	             * dateExtender.format(date, "M/dd/yy"); //"8/11/06"
+	             * dateExtender.format(date, "E"); //"6"
+	             * dateExtender.format(date, "h:m a"); //"12:55 AM"
+	             * dateExtender.format(date, 'h:m:s'); //"12:55:12"
+	             * dateExtender.format(date, 'h:m:s.SS'); //"12:55:12.35"
+	             * dateExtender.format(date, 'k:m:s.SS'); //"24:55:12.35"
+	             * dateExtender.format(date, 'H:m:s.SS'); //"0:55:12.35"
+	             * dateExtender.format(date, "ddMMyyyy"); //"11082006"
+	             *
+	             * @param date the date to format
+	             * @param {String} format the format of the date composed of the following options
+	             * <ul>
+	             *                  <li> G    Era designator    Text    AD</li>
+	             *                  <li> y    Year    Year    1996; 96</li>
+	             *                  <li> M    Month in year    Month    July; Jul; 07</li>
+	             *                  <li> w    Week in year    Number    27</li>
+	             *                  <li> W    Week in month    Number    2</li>
+	             *                  <li> D    Day in year    Number    189</li>
+	             *                  <li> d    Day in month    Number    10</li>
+	             *                  <li> E    Day in week    Text    Tuesday; Tue</li>
+	             *                  <li> a    Am/pm marker    Text    PM</li>
+	             *                  <li> H    Hour in day (0-23)    Number    0</li>
+	             *                  <li> k    Hour in day (1-24)    Number    24</li>
+	             *                  <li> K    Hour in am/pm (0-11)    Number    0</li>
+	             *                  <li> h    Hour in am/pm (1-12)    Number    12</li>
+	             *                  <li> m    Minute in hour    Number    30</li>
+	             *                  <li> s    Second in minute    Number    55</li>
+	             *                  <li> S    Millisecond    Number    978</li>
+	             *                  <li> z    Time zone    General time zone    Pacific Standard Time; PST; GMT-08:00</li>
+	             *                  <li> Z    Time zone    RFC 822 time zone    -0800 </li>
+	             * </ul>
+	             */
+	            format: function (date, format, utc) {
+	                utc = utc || false;
+	                var fullYear, month, day, d, hour, minute, second, millisecond;
+	                if (utc) {
+	                    fullYear = date.getUTCFullYear();
+	                    month = date.getUTCMonth();
+	                    day = date.getUTCDay();
+	                    d = date.getUTCDate();
+	                    hour = date.getUTCHours();
+	                    minute = date.getUTCMinutes();
+	                    second = date.getUTCSeconds();
+	                    millisecond = date.getUTCMilliseconds();
+	                } else {
+	                    fullYear = date.getFullYear();
+	                    month = date.getMonth();
+	                    d = date.getDate();
+	                    day = date.getDay();
+	                    hour = date.getHours();
+	                    minute = date.getMinutes();
+	                    second = date.getSeconds();
+	                    millisecond = date.getMilliseconds();
+	                }
+	                return format.replace(/([A-Za-z])\1*/g, function (match) {
+	                    var s, pad,
+	                        c = match.charAt(0),
+	                        l = match.length;
+	                    if (c === 'd') {
+	                        s = "" + d;
+	                        pad = true;
+	                    } else if (c === "H" && !s) {
+	                        s = "" + hour;
+	                        pad = true;
+	                    } else if (c === 'm' && !s) {
+	                        s = "" + minute;
+	                        pad = true;
+	                    } else if (c === 's') {
+	                        if (!s) {
+	                            s = "" + second;
+	                        }
+	                        pad = true;
+	                    } else if (c === "G") {
+	                        s = ((l < 4) ? eraAbbr : eraNames)[fullYear < 0 ? 0 : 1];
+	                    } else if (c === "y") {
+	                        s = fullYear;
+	                        if (l > 1) {
+	                            if (l === 2) {
+	                                s = _truncate("" + s, 2, true);
+	                            } else {
+	                                pad = true;
+	                            }
+	                        }
+	                    } else if (c.toUpperCase() === "Q") {
+	                        s = ceil((month + 1) / 3);
+	                        pad = true;
+	                    } else if (c === "M") {
+	                        if (l < 3) {
+	                            s = month + 1;
+	                            pad = true;
+	                        } else {
+	                            s = (l === 3 ? monthAbbr : monthNames)[month];
+	                        }
+	                    } else if (c === "w") {
+	                        s = getWeekOfYear(date, 0, utc);
+	                        pad = true;
+	                    } else if (c === "D") {
+	                        s = getDayOfYear(date, utc);
+	                        pad = true;
+	                    } else if (c === "E") {
+	                        if (l < 3) {
+	                            s = day + 1;
+	                            pad = true;
+	                        } else {
+	                            s = (l === -3 ? dayAbbr : dayNames)[day];
+	                        }
+	                    } else if (c === 'a') {
+	                        s = (hour < 12) ? 'AM' : 'PM';
+	                    } else if (c === "h") {
+	                        s = (hour % 12) || 12;
+	                        pad = true;
+	                    } else if (c === "K") {
+	                        s = (hour % 12);
+	                        pad = true;
+	                    } else if (c === "k") {
+	                        s = hour || 24;
+	                        pad = true;
+	                    } else if (c === "S") {
+	                        s = round(millisecond * pow(10, l - 3));
+	                        pad = true;
+	                    } else if (c === "z" || c === "v" || c === "Z") {
+	                        s = getTimezoneName(date);
+	                        if ((c === "z" || c === "v") && !s) {
+	                            l = 4;
+	                        }
+	                        if (!s || c === "Z") {
+	                            var offset = date.getTimezoneOffset();
+	                            var tz = [
+	                                (offset >= 0 ? "-" : "+"),
+	                                _pad(floor(abs(offset) / 60), 2, "0"),
+	                                _pad(abs(offset) % 60, 2, "0")
+	                            ];
+	                            if (l === 4) {
+	                                tz.splice(0, 0, "GMT");
+	                                tz.splice(3, 0, ":");
+	                            }
+	                            s = tz.join("");
+	                        }
+	                    } else {
+	                        s = match;
+	                    }
+	                    if (pad) {
+	                        s = _pad(s, l, '0');
+	                    }
+	                    return s;
+	                });
+	            }
+
+	        };
+
+	        var numberDate = {};
+
+	        function addInterval(interval) {
+	            numberDate[interval + "sFromNow"] = function (val) {
+	                return date.add(new Date(), interval, val);
+	            };
+	            numberDate[interval + "sAgo"] = function (val) {
+	                return date.add(new Date(), interval, -val);
+	            };
+	        }
+
+	        var intervals = ["year", "month", "day", "hour", "minute", "second"];
+	        for (var i = 0, l = intervals.length; i < l; i++) {
+	            addInterval(intervals[i]);
+	        }
+
+	        var stringDate = {
+
+	            parseDate: function (dateStr, format) {
+	                if (!format) {
+	                    throw new Error('format required when calling dateExtender.parse');
+	                }
+	                var tokens = [], regexp = buildDateEXP(format, tokens),
+	                    re = new RegExp("^" + regexp + "$", "i"),
+	                    match = re.exec(dateStr);
+	                if (!match) {
+	                    return null;
+	                } // null
+	                var result = [1970, 0, 1, 0, 0, 0, 0], // will get converted to a Date at the end
+	                    amPm = "",
+	                    valid = every(match, function (v, i) {
+	                        if (i) {
+	                            var token = tokens[i - 1];
+	                            var l = token.length, type = token.charAt(0);
+	                            if (type === 'y') {
+	                                if (v < 100) {
+	                                    v = parseInt(v, 10);
+	                                    //choose century to apply, according to a sliding window
+	                                    //of 80 years before and 20 years after present year
+	                                    var year = '' + new Date().getFullYear(),
+	                                        century = year.substring(0, 2) * 100,
+	                                        cutoff = min(year.substring(2, 4) + 20, 99);
+	                                    result[0] = (v < cutoff) ? century + v : century - 100 + v;
+	                                } else {
+	                                    result[0] = v;
+	                                }
+	                            } else if (type === "M") {
+	                                if (l > 2) {
+	                                    var months = monthNames, j, k;
+	                                    if (l === 3) {
+	                                        months = monthAbbr;
+	                                    }
+	                                    //Tolerate abbreviating period in month part
+	                                    //Case-insensitive comparison
+	                                    v = v.replace(".", "").toLowerCase();
+	                                    var contains = false;
+	                                    for (j = 0, k = months.length; j < k && !contains; j++) {
+	                                        var s = months[j].replace(".", "").toLocaleLowerCase();
+	                                        if (s === v) {
+	                                            v = j;
+	                                            contains = true;
+	                                        }
+	                                    }
+	                                    if (!contains) {
+	                                        return false;
+	                                    }
+	                                } else {
+	                                    v--;
+	                                }
+	                                result[1] = v;
+	                            } else if (type === "E" || type === "e") {
+	                                var days = dayNames;
+	                                if (l === 3) {
+	                                    days = dayAbbr;
+	                                }
+	                                //Case-insensitive comparison
+	                                v = v.toLowerCase();
+	                                days = array.map(days, function (d) {
+	                                    return d.toLowerCase();
+	                                });
+	                                var d = array.indexOf(days, v);
+	                                if (d === -1) {
+	                                    v = parseInt(v, 10);
+	                                    if (isNaN(v) || v > days.length) {
+	                                        return false;
+	                                    }
+	                                } else {
+	                                    v = d;
+	                                }
+	                            } else if (type === 'D' || type === "d") {
+	                                if (type === "D") {
+	                                    result[1] = 0;
+	                                }
+	                                result[2] = v;
+	                            } else if (type === "a") {
+	                                var am = "am";
+	                                var pm = "pm";
+	                                var period = /\./g;
+	                                v = v.replace(period, '').toLowerCase();
+	                                // we might not have seen the hours field yet, so store the state and apply hour change later
+	                                amPm = (v === pm) ? 'p' : (v === am) ? 'a' : '';
+	                            } else if (type === "k" || type === "h" || type === "H" || type === "K") {
+	                                if (type === "k" && (+v) === 24) {
+	                                    v = 0;
+	                                }
+	                                result[3] = v;
+	                            } else if (type === "m") {
+	                                result[4] = v;
+	                            } else if (type === "s") {
+	                                result[5] = v;
+	                            } else if (type === "S") {
+	                                result[6] = v;
+	                            }
+	                        }
+	                        return true;
+	                    });
+	                if (valid) {
+	                    var hours = +result[3];
+	                    //account for am/pm
+	                    if (amPm === 'p' && hours < 12) {
+	                        result[3] = hours + 12; //e.g., 3pm -> 15
+	                    } else if (amPm === 'a' && hours === 12) {
+	                        result[3] = 0; //12am -> 0
+	                    }
+	                    var dateObject = new Date(result[0], result[1], result[2], result[3], result[4], result[5], result[6]); // Date
+	                    var dateToken = (array.indexOf(tokens, 'd') !== -1),
+	                        monthToken = (array.indexOf(tokens, 'M') !== -1),
+	                        month = result[1],
+	                        day = result[2],
+	                        dateMonth = dateObject.getMonth(),
+	                        dateDay = dateObject.getDate();
+	                    if ((monthToken && dateMonth > month) || (dateToken && dateDay > day)) {
+	                        return null;
+	                    }
+	                    return dateObject; // Date
+	                } else {
+	                    return null;
+	                }
+	            }
+	        };
+
+
+	        var ret = extended.define(is.isDate, date).define(is.isString, stringDate).define(is.isNumber, numberDate);
+	        for (i in date) {
+	            if (date.hasOwnProperty(i)) {
+	                ret[i] = date[i];
+	            }
+	        }
+
+	        for (i in stringDate) {
+	            if (stringDate.hasOwnProperty(i)) {
+	                ret[i] = stringDate[i];
+	            }
+	        }
+	        for (i in numberDate) {
+	            if (numberDate.hasOwnProperty(i)) {
+	                ret[i] = numberDate[i];
+	            }
+	        }
+	        return ret;
+	    }
+
+	    if (true) {
+	        if ("undefined" !== typeof module && module.exports) {
+	            module.exports = defineDate(__webpack_require__(33), __webpack_require__(32), __webpack_require__(39));
+
+	        }
+	    } else if ("function" === typeof define && define.amd) {
+	        define(["extended", "is-extended", "array-extended"], function (extended, is, arr) {
+	            return defineDate(extended, is, arr);
+	        });
+	    } else {
+	        this.dateExtended = defineDate(this.extended, this.isExtended, this.arrayExtended);
+	    }
+
+	}).call(this);
+
+
+
+
+
+
+
+
+/***/ },
+/* 43 */
+/***/ function(module, exports) {
+
+	exports.endianness = function () { return 'LE' };
+
+	exports.hostname = function () {
+	    if (typeof location !== 'undefined') {
+	        return location.hostname
+	    }
+	    else return '';
+	};
+
+	exports.loadavg = function () { return [] };
+
+	exports.uptime = function () { return 0 };
+
+	exports.freemem = function () {
+	    return Number.MAX_VALUE;
+	};
+
+	exports.totalmem = function () {
+	    return Number.MAX_VALUE;
+	};
+
+	exports.cpus = function () { return [] };
+
+	exports.type = function () { return 'Browser' };
+
+	exports.release = function () {
+	    if (typeof navigator !== 'undefined') {
+	        return navigator.appVersion;
+	    }
+	    return '';
+	};
+
+	exports.networkInterfaces
+	= exports.getNetworkInterfaces
+	= function () { return {} };
+
+	exports.arch = function () { return 'javascript' };
+
+	exports.platform = function () { return 'browser' };
+
+	exports.tmpdir = exports.tmpDir = function () {
+	    return '/tmp';
+	};
+
+	exports.EOL = '\n';
+
+
+/***/ },
+/* 44 */
+/***/ function(module, exports, __webpack_require__) {
+
+	// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	module.exports = Stream;
+
+	var EE = __webpack_require__(45).EventEmitter;
+	var inherits = __webpack_require__(46);
+
+	inherits(Stream, EE);
+	Stream.Readable = __webpack_require__(47);
+	Stream.Writable = __webpack_require__(57);
+	Stream.Duplex = __webpack_require__(58);
+	Stream.Transform = __webpack_require__(59);
+	Stream.PassThrough = __webpack_require__(60);
+
+	// Backwards-compat with node 0.4.x
+	Stream.Stream = Stream;
+
+
+
+	// old-style streams.  Note that the pipe method (the only relevant
+	// part of this class) is overridden in the Readable class.
+
+	function Stream() {
+	  EE.call(this);
+	}
+
+	Stream.prototype.pipe = function(dest, options) {
+	  var source = this;
+
+	  function ondata(chunk) {
+	    if (dest.writable) {
+	      if (false === dest.write(chunk) && source.pause) {
+	        source.pause();
+	      }
+	    }
+	  }
+
+	  source.on('data', ondata);
+
+	  function ondrain() {
+	    if (source.readable && source.resume) {
+	      source.resume();
+	    }
+	  }
+
+	  dest.on('drain', ondrain);
+
+	  // If the 'end' option is not supplied, dest.end() will be called when
+	  // source gets the 'end' or 'close' events.  Only dest.end() once.
+	  if (!dest._isStdio && (!options || options.end !== false)) {
+	    source.on('end', onend);
+	    source.on('close', onclose);
+	  }
+
+	  var didOnEnd = false;
+	  function onend() {
+	    if (didOnEnd) return;
+	    didOnEnd = true;
+
+	    dest.end();
+	  }
+
+
+	  function onclose() {
+	    if (didOnEnd) return;
+	    didOnEnd = true;
+
+	    if (typeof dest.destroy === 'function') dest.destroy();
+	  }
+
+	  // don't leave dangling pipes when there are errors.
+	  function onerror(er) {
+	    cleanup();
+	    if (EE.listenerCount(this, 'error') === 0) {
+	      throw er; // Unhandled stream error in pipe.
+	    }
+	  }
+
+	  source.on('error', onerror);
+	  dest.on('error', onerror);
+
+	  // remove all the event listeners that were added.
+	  function cleanup() {
+	    source.removeListener('data', ondata);
+	    dest.removeListener('drain', ondrain);
+
+	    source.removeListener('end', onend);
+	    source.removeListener('close', onclose);
+
+	    source.removeListener('error', onerror);
+	    dest.removeListener('error', onerror);
+
+	    source.removeListener('end', cleanup);
+	    source.removeListener('close', cleanup);
+
+	    dest.removeListener('close', cleanup);
+	  }
+
+	  source.on('end', cleanup);
+	  source.on('close', cleanup);
+
+	  dest.on('close', cleanup);
+
+	  dest.emit('pipe', source);
+
+	  // Allow for unix-like usage: A.pipe(B).pipe(C)
+	  return dest;
+	};
+
+
+/***/ },
+/* 45 */
+/***/ function(module, exports) {
+
+	// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	function EventEmitter() {
+	  this._events = this._events || {};
+	  this._maxListeners = this._maxListeners || undefined;
+	}
+	module.exports = EventEmitter;
+
+	// Backwards-compat with node 0.10.x
+	EventEmitter.EventEmitter = EventEmitter;
+
+	EventEmitter.prototype._events = undefined;
+	EventEmitter.prototype._maxListeners = undefined;
+
+	// By default EventEmitters will print a warning if more than 10 listeners are
+	// added to it. This is a useful default which helps finding memory leaks.
+	EventEmitter.defaultMaxListeners = 10;
+
+	// Obviously not all Emitters should be limited to 10. This function allows
+	// that to be increased. Set to zero for unlimited.
+	EventEmitter.prototype.setMaxListeners = function(n) {
+	  if (!isNumber(n) || n < 0 || isNaN(n))
+	    throw TypeError('n must be a positive number');
+	  this._maxListeners = n;
+	  return this;
+	};
+
+	EventEmitter.prototype.emit = function(type) {
+	  var er, handler, len, args, i, listeners;
+
+	  if (!this._events)
+	    this._events = {};
+
+	  // If there is no 'error' event listener then throw.
+	  if (type === 'error') {
+	    if (!this._events.error ||
+	        (isObject(this._events.error) && !this._events.error.length)) {
+	      er = arguments[1];
+	      if (er instanceof Error) {
+	        throw er; // Unhandled 'error' event
+	      } else {
+	        // At least give some kind of context to the user
+	        var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
+	        err.context = er;
+	        throw err;
+	      }
+	    }
+	  }
+
+	  handler = this._events[type];
+
+	  if (isUndefined(handler))
+	    return false;
+
+	  if (isFunction(handler)) {
+	    switch (arguments.length) {
+	      // fast cases
+	      case 1:
+	        handler.call(this);
+	        break;
+	      case 2:
+	        handler.call(this, arguments[1]);
+	        break;
+	      case 3:
+	        handler.call(this, arguments[1], arguments[2]);
+	        break;
+	      // slower
+	      default:
+	        args = Array.prototype.slice.call(arguments, 1);
+	        handler.apply(this, args);
+	    }
+	  } else if (isObject(handler)) {
+	    args = Array.prototype.slice.call(arguments, 1);
+	    listeners = handler.slice();
+	    len = listeners.length;
+	    for (i = 0; i < len; i++)
+	      listeners[i].apply(this, args);
+	  }
+
+	  return true;
+	};
+
+	EventEmitter.prototype.addListener = function(type, listener) {
+	  var m;
+
+	  if (!isFunction(listener))
+	    throw TypeError('listener must be a function');
+
+	  if (!this._events)
+	    this._events = {};
+
+	  // To avoid recursion in the case that type === "newListener"! Before
+	  // adding it to the listeners, first emit "newListener".
+	  if (this._events.newListener)
+	    this.emit('newListener', type,
+	              isFunction(listener.listener) ?
+	              listener.listener : listener);
+
+	  if (!this._events[type])
+	    // Optimize the case of one listener. Don't need the extra array object.
+	    this._events[type] = listener;
+	  else if (isObject(this._events[type]))
+	    // If we've already got an array, just append.
+	    this._events[type].push(listener);
+	  else
+	    // Adding the second element, need to change to array.
+	    this._events[type] = [this._events[type], listener];
+
+	  // Check for listener leak
+	  if (isObject(this._events[type]) && !this._events[type].warned) {
+	    if (!isUndefined(this._maxListeners)) {
+	      m = this._maxListeners;
+	    } else {
+	      m = EventEmitter.defaultMaxListeners;
+	    }
+
+	    if (m && m > 0 && this._events[type].length > m) {
+	      this._events[type].warned = true;
+	      console.error('(node) warning: possible EventEmitter memory ' +
+	                    'leak detected. %d listeners added. ' +
+	                    'Use emitter.setMaxListeners() to increase limit.',
+	                    this._events[type].length);
+	      if (typeof console.trace === 'function') {
+	        // not supported in IE 10
+	        console.trace();
+	      }
+	    }
+	  }
+
+	  return this;
+	};
+
+	EventEmitter.prototype.on = EventEmitter.prototype.addListener;
+
+	EventEmitter.prototype.once = function(type, listener) {
+	  if (!isFunction(listener))
+	    throw TypeError('listener must be a function');
+
+	  var fired = false;
+
+	  function g() {
+	    this.removeListener(type, g);
+
+	    if (!fired) {
+	      fired = true;
+	      listener.apply(this, arguments);
+	    }
+	  }
+
+	  g.listener = listener;
+	  this.on(type, g);
+
+	  return this;
+	};
+
+	// emits a 'removeListener' event iff the listener was removed
+	EventEmitter.prototype.removeListener = function(type, listener) {
+	  var list, position, length, i;
+
+	  if (!isFunction(listener))
+	    throw TypeError('listener must be a function');
+
+	  if (!this._events || !this._events[type])
+	    return this;
+
+	  list = this._events[type];
+	  length = list.length;
+	  position = -1;
+
+	  if (list === listener ||
+	      (isFunction(list.listener) && list.listener === listener)) {
+	    delete this._events[type];
+	    if (this._events.removeListener)
+	      this.emit('removeListener', type, listener);
+
+	  } else if (isObject(list)) {
+	    for (i = length; i-- > 0;) {
+	      if (list[i] === listener ||
+	          (list[i].listener && list[i].listener === listener)) {
+	        position = i;
+	        break;
+	      }
+	    }
+
+	    if (position < 0)
+	      return this;
+
+	    if (list.length === 1) {
+	      list.length = 0;
+	      delete this._events[type];
+	    } else {
+	      list.splice(position, 1);
+	    }
+
+	    if (this._events.removeListener)
+	      this.emit('removeListener', type, listener);
+	  }
+
+	  return this;
+	};
+
+	EventEmitter.prototype.removeAllListeners = function(type) {
+	  var key, listeners;
+
+	  if (!this._events)
+	    return this;
+
+	  // not listening for removeListener, no need to emit
+	  if (!this._events.removeListener) {
+	    if (arguments.length === 0)
+	      this._events = {};
+	    else if (this._events[type])
+	      delete this._events[type];
+	    return this;
+	  }
+
+	  // emit removeListener for all listeners on all events
+	  if (arguments.length === 0) {
+	    for (key in this._events) {
+	      if (key === 'removeListener') continue;
+	      this.removeAllListeners(key);
+	    }
+	    this.removeAllListeners('removeListener');
+	    this._events = {};
+	    return this;
+	  }
+
+	  listeners = this._events[type];
+
+	  if (isFunction(listeners)) {
+	    this.removeListener(type, listeners);
+	  } else if (listeners) {
+	    // LIFO order
+	    while (listeners.length)
+	      this.removeListener(type, listeners[listeners.length - 1]);
+	  }
+	  delete this._events[type];
+
+	  return this;
+	};
+
+	EventEmitter.prototype.listeners = function(type) {
+	  var ret;
+	  if (!this._events || !this._events[type])
+	    ret = [];
+	  else if (isFunction(this._events[type]))
+	    ret = [this._events[type]];
+	  else
+	    ret = this._events[type].slice();
+	  return ret;
+	};
+
+	EventEmitter.prototype.listenerCount = function(type) {
+	  if (this._events) {
+	    var evlistener = this._events[type];
+
+	    if (isFunction(evlistener))
+	      return 1;
+	    else if (evlistener)
+	      return evlistener.length;
+	  }
+	  return 0;
+	};
+
+	EventEmitter.listenerCount = function(emitter, type) {
+	  return emitter.listenerCount(type);
+	};
+
+	function isFunction(arg) {
+	  return typeof arg === 'function';
+	}
+
+	function isNumber(arg) {
+	  return typeof arg === 'number';
+	}
+
+	function isObject(arg) {
+	  return typeof arg === 'object' && arg !== null;
+	}
+
+	function isUndefined(arg) {
+	  return arg === void 0;
+	}
+
+
+/***/ },
+/* 46 */
+/***/ function(module, exports) {
+
+	if (typeof Object.create === 'function') {
+	  // implementation from standard node.js 'util' module
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    ctor.prototype = Object.create(superCtor.prototype, {
+	      constructor: {
+	        value: ctor,
+	        enumerable: false,
+	        writable: true,
+	        configurable: true
+	      }
+	    });
+	  };
+	} else {
+	  // old school shim for old browsers
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    var TempCtor = function () {}
+	    TempCtor.prototype = superCtor.prototype
+	    ctor.prototype = new TempCtor()
+	    ctor.prototype.constructor = ctor
+	  }
+	}
+
+
+/***/ },
+/* 47 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {exports = module.exports = __webpack_require__(48);
+	exports.Stream = __webpack_require__(44);
+	exports.Readable = exports;
+	exports.Writable = __webpack_require__(53);
+	exports.Duplex = __webpack_require__(52);
+	exports.Transform = __webpack_require__(55);
+	exports.PassThrough = __webpack_require__(56);
+	if (!process.browser && process.env.READABLE_STREAM === 'disable') {
+	  module.exports = __webpack_require__(44);
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 48 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	module.exports = Readable;
+
+	/*<replacement>*/
+	var isArray = __webpack_require__(49);
+	/*</replacement>*/
+
+
+	/*<replacement>*/
+	var Buffer = __webpack_require__(8).Buffer;
+	/*</replacement>*/
+
+	Readable.ReadableState = ReadableState;
+
+	var EE = __webpack_require__(45).EventEmitter;
+
+	/*<replacement>*/
+	if (!EE.listenerCount) EE.listenerCount = function(emitter, type) {
+	  return emitter.listeners(type).length;
+	};
+	/*</replacement>*/
+
+	var Stream = __webpack_require__(44);
+
+	/*<replacement>*/
+	var util = __webpack_require__(50);
+	util.inherits = __webpack_require__(46);
+	/*</replacement>*/
+
+	var StringDecoder;
+
+
+	/*<replacement>*/
+	var debug = __webpack_require__(51);
+	if (debug && debug.debuglog) {
+	  debug = debug.debuglog('stream');
+	} else {
+	  debug = function () {};
+	}
+	/*</replacement>*/
+
+
+	util.inherits(Readable, Stream);
+
+	function ReadableState(options, stream) {
+	  var Duplex = __webpack_require__(52);
+
+	  options = options || {};
+
+	  // the point at which it stops calling _read() to fill the buffer
+	  // Note: 0 is a valid value, means "don't call _read preemptively ever"
+	  var hwm = options.highWaterMark;
+	  var defaultHwm = options.objectMode ? 16 : 16 * 1024;
+	  this.highWaterMark = (hwm || hwm === 0) ? hwm : defaultHwm;
+
+	  // cast to ints.
+	  this.highWaterMark = ~~this.highWaterMark;
+
+	  this.buffer = [];
+	  this.length = 0;
+	  this.pipes = null;
+	  this.pipesCount = 0;
+	  this.flowing = null;
+	  this.ended = false;
+	  this.endEmitted = false;
+	  this.reading = false;
+
+	  // a flag to be able to tell if the onwrite cb is called immediately,
+	  // or on a later tick.  We set this to true at first, because any
+	  // actions that shouldn't happen until "later" should generally also
+	  // not happen before the first write call.
+	  this.sync = true;
+
+	  // whenever we return null, then we set a flag to say
+	  // that we're awaiting a 'readable' event emission.
+	  this.needReadable = false;
+	  this.emittedReadable = false;
+	  this.readableListening = false;
+
+
+	  // object stream flag. Used to make read(n) ignore n and to
+	  // make all the buffer merging and length checks go away
+	  this.objectMode = !!options.objectMode;
+
+	  if (stream instanceof Duplex)
+	    this.objectMode = this.objectMode || !!options.readableObjectMode;
+
+	  // Crypto is kind of old and crusty.  Historically, its default string
+	  // encoding is 'binary' so we have to make this configurable.
+	  // Everything else in the universe uses 'utf8', though.
+	  this.defaultEncoding = options.defaultEncoding || 'utf8';
+
+	  // when piping, we only care about 'readable' events that happen
+	  // after read()ing all the bytes and not getting any pushback.
+	  this.ranOut = false;
+
+	  // the number of writers that are awaiting a drain event in .pipe()s
+	  this.awaitDrain = 0;
+
+	  // if true, a maybeReadMore has been scheduled
+	  this.readingMore = false;
+
+	  this.decoder = null;
+	  this.encoding = null;
+	  if (options.encoding) {
+	    if (!StringDecoder)
+	      StringDecoder = __webpack_require__(54).StringDecoder;
+	    this.decoder = new StringDecoder(options.encoding);
+	    this.encoding = options.encoding;
+	  }
+	}
+
+	function Readable(options) {
+	  var Duplex = __webpack_require__(52);
+
+	  if (!(this instanceof Readable))
+	    return new Readable(options);
+
+	  this._readableState = new ReadableState(options, this);
+
+	  // legacy
+	  this.readable = true;
+
+	  Stream.call(this);
+	}
+
+	// Manually shove something into the read() buffer.
+	// This returns true if the highWaterMark has not been hit yet,
+	// similar to how Writable.write() returns true if you should
+	// write() some more.
+	Readable.prototype.push = function(chunk, encoding) {
+	  var state = this._readableState;
+
+	  if (util.isString(chunk) && !state.objectMode) {
+	    encoding = encoding || state.defaultEncoding;
+	    if (encoding !== state.encoding) {
+	      chunk = new Buffer(chunk, encoding);
+	      encoding = '';
+	    }
+	  }
+
+	  return readableAddChunk(this, state, chunk, encoding, false);
+	};
+
+	// Unshift should *always* be something directly out of read()
+	Readable.prototype.unshift = function(chunk) {
+	  var state = this._readableState;
+	  return readableAddChunk(this, state, chunk, '', true);
+	};
+
+	function readableAddChunk(stream, state, chunk, encoding, addToFront) {
+	  var er = chunkInvalid(state, chunk);
+	  if (er) {
+	    stream.emit('error', er);
+	  } else if (util.isNullOrUndefined(chunk)) {
+	    state.reading = false;
+	    if (!state.ended)
+	      onEofChunk(stream, state);
+	  } else if (state.objectMode || chunk && chunk.length > 0) {
+	    if (state.ended && !addToFront) {
+	      var e = new Error('stream.push() after EOF');
+	      stream.emit('error', e);
+	    } else if (state.endEmitted && addToFront) {
+	      var e = new Error('stream.unshift() after end event');
+	      stream.emit('error', e);
+	    } else {
+	      if (state.decoder && !addToFront && !encoding)
+	        chunk = state.decoder.write(chunk);
+
+	      if (!addToFront)
+	        state.reading = false;
+
+	      // if we want the data now, just emit it.
+	      if (state.flowing && state.length === 0 && !state.sync) {
+	        stream.emit('data', chunk);
+	        stream.read(0);
+	      } else {
+	        // update the buffer info.
+	        state.length += state.objectMode ? 1 : chunk.length;
+	        if (addToFront)
+	          state.buffer.unshift(chunk);
+	        else
+	          state.buffer.push(chunk);
+
+	        if (state.needReadable)
+	          emitReadable(stream);
+	      }
+
+	      maybeReadMore(stream, state);
+	    }
+	  } else if (!addToFront) {
+	    state.reading = false;
+	  }
+
+	  return needMoreData(state);
+	}
+
+
+
+	// if it's past the high water mark, we can push in some more.
+	// Also, if we have no data yet, we can stand some
+	// more bytes.  This is to work around cases where hwm=0,
+	// such as the repl.  Also, if the push() triggered a
+	// readable event, and the user called read(largeNumber) such that
+	// needReadable was set, then we ought to push more, so that another
+	// 'readable' event will be triggered.
+	function needMoreData(state) {
+	  return !state.ended &&
+	         (state.needReadable ||
+	          state.length < state.highWaterMark ||
+	          state.length === 0);
+	}
+
+	// backwards compatibility.
+	Readable.prototype.setEncoding = function(enc) {
+	  if (!StringDecoder)
+	    StringDecoder = __webpack_require__(54).StringDecoder;
+	  this._readableState.decoder = new StringDecoder(enc);
+	  this._readableState.encoding = enc;
+	  return this;
+	};
+
+	// Don't raise the hwm > 128MB
+	var MAX_HWM = 0x800000;
+	function roundUpToNextPowerOf2(n) {
+	  if (n >= MAX_HWM) {
+	    n = MAX_HWM;
+	  } else {
+	    // Get the next highest power of 2
+	    n--;
+	    for (var p = 1; p < 32; p <<= 1) n |= n >> p;
+	    n++;
+	  }
+	  return n;
+	}
+
+	function howMuchToRead(n, state) {
+	  if (state.length === 0 && state.ended)
+	    return 0;
+
+	  if (state.objectMode)
+	    return n === 0 ? 0 : 1;
+
+	  if (isNaN(n) || util.isNull(n)) {
+	    // only flow one buffer at a time
+	    if (state.flowing && state.buffer.length)
+	      return state.buffer[0].length;
+	    else
+	      return state.length;
+	  }
+
+	  if (n <= 0)
+	    return 0;
+
+	  // If we're asking for more than the target buffer level,
+	  // then raise the water mark.  Bump up to the next highest
+	  // power of 2, to prevent increasing it excessively in tiny
+	  // amounts.
+	  if (n > state.highWaterMark)
+	    state.highWaterMark = roundUpToNextPowerOf2(n);
+
+	  // don't have that much.  return null, unless we've ended.
+	  if (n > state.length) {
+	    if (!state.ended) {
+	      state.needReadable = true;
+	      return 0;
+	    } else
+	      return state.length;
+	  }
+
+	  return n;
+	}
+
+	// you can override either this method, or the async _read(n) below.
+	Readable.prototype.read = function(n) {
+	  debug('read', n);
+	  var state = this._readableState;
+	  var nOrig = n;
+
+	  if (!util.isNumber(n) || n > 0)
+	    state.emittedReadable = false;
+
+	  // if we're doing read(0) to trigger a readable event, but we
+	  // already have a bunch of data in the buffer, then just trigger
+	  // the 'readable' event and move on.
+	  if (n === 0 &&
+	      state.needReadable &&
+	      (state.length >= state.highWaterMark || state.ended)) {
+	    debug('read: emitReadable', state.length, state.ended);
+	    if (state.length === 0 && state.ended)
+	      endReadable(this);
+	    else
+	      emitReadable(this);
+	    return null;
+	  }
+
+	  n = howMuchToRead(n, state);
+
+	  // if we've ended, and we're now clear, then finish it up.
+	  if (n === 0 && state.ended) {
+	    if (state.length === 0)
+	      endReadable(this);
+	    return null;
+	  }
+
+	  // All the actual chunk generation logic needs to be
+	  // *below* the call to _read.  The reason is that in certain
+	  // synthetic stream cases, such as passthrough streams, _read
+	  // may be a completely synchronous operation which may change
+	  // the state of the read buffer, providing enough data when
+	  // before there was *not* enough.
+	  //
+	  // So, the steps are:
+	  // 1. Figure out what the state of things will be after we do
+	  // a read from the buffer.
+	  //
+	  // 2. If that resulting state will trigger a _read, then call _read.
+	  // Note that this may be asynchronous, or synchronous.  Yes, it is
+	  // deeply ugly to write APIs this way, but that still doesn't mean
+	  // that the Readable class should behave improperly, as streams are
+	  // designed to be sync/async agnostic.
+	  // Take note if the _read call is sync or async (ie, if the read call
+	  // has returned yet), so that we know whether or not it's safe to emit
+	  // 'readable' etc.
+	  //
+	  // 3. Actually pull the requested chunks out of the buffer and return.
+
+	  // if we need a readable event, then we need to do some reading.
+	  var doRead = state.needReadable;
+	  debug('need readable', doRead);
+
+	  // if we currently have less than the highWaterMark, then also read some
+	  if (state.length === 0 || state.length - n < state.highWaterMark) {
+	    doRead = true;
+	    debug('length less than watermark', doRead);
+	  }
+
+	  // however, if we've ended, then there's no point, and if we're already
+	  // reading, then it's unnecessary.
+	  if (state.ended || state.reading) {
+	    doRead = false;
+	    debug('reading or ended', doRead);
+	  }
+
+	  if (doRead) {
+	    debug('do read');
+	    state.reading = true;
+	    state.sync = true;
+	    // if the length is currently zero, then we *need* a readable event.
+	    if (state.length === 0)
+	      state.needReadable = true;
+	    // call internal read method
+	    this._read(state.highWaterMark);
+	    state.sync = false;
+	  }
+
+	  // If _read pushed data synchronously, then `reading` will be false,
+	  // and we need to re-evaluate how much data we can return to the user.
+	  if (doRead && !state.reading)
+	    n = howMuchToRead(nOrig, state);
+
+	  var ret;
+	  if (n > 0)
+	    ret = fromList(n, state);
+	  else
+	    ret = null;
+
+	  if (util.isNull(ret)) {
+	    state.needReadable = true;
+	    n = 0;
+	  }
+
+	  state.length -= n;
+
+	  // If we have nothing in the buffer, then we want to know
+	  // as soon as we *do* get something into the buffer.
+	  if (state.length === 0 && !state.ended)
+	    state.needReadable = true;
+
+	  // If we tried to read() past the EOF, then emit end on the next tick.
+	  if (nOrig !== n && state.ended && state.length === 0)
+	    endReadable(this);
+
+	  if (!util.isNull(ret))
+	    this.emit('data', ret);
+
+	  return ret;
+	};
+
+	function chunkInvalid(state, chunk) {
+	  var er = null;
+	  if (!util.isBuffer(chunk) &&
+	      !util.isString(chunk) &&
+	      !util.isNullOrUndefined(chunk) &&
+	      !state.objectMode) {
+	    er = new TypeError('Invalid non-string/buffer chunk');
+	  }
+	  return er;
+	}
+
+
+	function onEofChunk(stream, state) {
+	  if (state.decoder && !state.ended) {
+	    var chunk = state.decoder.end();
+	    if (chunk && chunk.length) {
+	      state.buffer.push(chunk);
+	      state.length += state.objectMode ? 1 : chunk.length;
+	    }
+	  }
+	  state.ended = true;
+
+	  // emit 'readable' now to make sure it gets picked up.
+	  emitReadable(stream);
+	}
+
+	// Don't emit readable right away in sync mode, because this can trigger
+	// another read() call => stack overflow.  This way, it might trigger
+	// a nextTick recursion warning, but that's not so bad.
+	function emitReadable(stream) {
+	  var state = stream._readableState;
+	  state.needReadable = false;
+	  if (!state.emittedReadable) {
+	    debug('emitReadable', state.flowing);
+	    state.emittedReadable = true;
+	    if (state.sync)
+	      process.nextTick(function() {
+	        emitReadable_(stream);
+	      });
+	    else
+	      emitReadable_(stream);
+	  }
+	}
+
+	function emitReadable_(stream) {
+	  debug('emit readable');
+	  stream.emit('readable');
+	  flow(stream);
+	}
+
+
+	// at this point, the user has presumably seen the 'readable' event,
+	// and called read() to consume some data.  that may have triggered
+	// in turn another _read(n) call, in which case reading = true if
+	// it's in progress.
+	// However, if we're not ended, or reading, and the length < hwm,
+	// then go ahead and try to read some more preemptively.
+	function maybeReadMore(stream, state) {
+	  if (!state.readingMore) {
+	    state.readingMore = true;
+	    process.nextTick(function() {
+	      maybeReadMore_(stream, state);
+	    });
+	  }
+	}
+
+	function maybeReadMore_(stream, state) {
+	  var len = state.length;
+	  while (!state.reading && !state.flowing && !state.ended &&
+	         state.length < state.highWaterMark) {
+	    debug('maybeReadMore read 0');
+	    stream.read(0);
+	    if (len === state.length)
+	      // didn't get any data, stop spinning.
+	      break;
+	    else
+	      len = state.length;
+	  }
+	  state.readingMore = false;
+	}
+
+	// abstract method.  to be overridden in specific implementation classes.
+	// call cb(er, data) where data is <= n in length.
+	// for virtual (non-string, non-buffer) streams, "length" is somewhat
+	// arbitrary, and perhaps not very meaningful.
+	Readable.prototype._read = function(n) {
+	  this.emit('error', new Error('not implemented'));
+	};
+
+	Readable.prototype.pipe = function(dest, pipeOpts) {
+	  var src = this;
+	  var state = this._readableState;
+
+	  switch (state.pipesCount) {
+	    case 0:
+	      state.pipes = dest;
+	      break;
+	    case 1:
+	      state.pipes = [state.pipes, dest];
+	      break;
+	    default:
+	      state.pipes.push(dest);
+	      break;
+	  }
+	  state.pipesCount += 1;
+	  debug('pipe count=%d opts=%j', state.pipesCount, pipeOpts);
+
+	  var doEnd = (!pipeOpts || pipeOpts.end !== false) &&
+	              dest !== process.stdout &&
+	              dest !== process.stderr;
+
+	  var endFn = doEnd ? onend : cleanup;
+	  if (state.endEmitted)
+	    process.nextTick(endFn);
+	  else
+	    src.once('end', endFn);
+
+	  dest.on('unpipe', onunpipe);
+	  function onunpipe(readable) {
+	    debug('onunpipe');
+	    if (readable === src) {
+	      cleanup();
+	    }
+	  }
+
+	  function onend() {
+	    debug('onend');
+	    dest.end();
+	  }
+
+	  // when the dest drains, it reduces the awaitDrain counter
+	  // on the source.  This would be more elegant with a .once()
+	  // handler in flow(), but adding and removing repeatedly is
+	  // too slow.
+	  var ondrain = pipeOnDrain(src);
+	  dest.on('drain', ondrain);
+
+	  function cleanup() {
+	    debug('cleanup');
+	    // cleanup event handlers once the pipe is broken
+	    dest.removeListener('close', onclose);
+	    dest.removeListener('finish', onfinish);
+	    dest.removeListener('drain', ondrain);
+	    dest.removeListener('error', onerror);
+	    dest.removeListener('unpipe', onunpipe);
+	    src.removeListener('end', onend);
+	    src.removeListener('end', cleanup);
+	    src.removeListener('data', ondata);
+
+	    // if the reader is waiting for a drain event from this
+	    // specific writer, then it would cause it to never start
+	    // flowing again.
+	    // So, if this is awaiting a drain, then we just call it now.
+	    // If we don't know, then assume that we are waiting for one.
+	    if (state.awaitDrain &&
+	        (!dest._writableState || dest._writableState.needDrain))
+	      ondrain();
+	  }
+
+	  src.on('data', ondata);
+	  function ondata(chunk) {
+	    debug('ondata');
+	    var ret = dest.write(chunk);
+	    if (false === ret) {
+	      debug('false write response, pause',
+	            src._readableState.awaitDrain);
+	      src._readableState.awaitDrain++;
+	      src.pause();
+	    }
+	  }
+
+	  // if the dest has an error, then stop piping into it.
+	  // however, don't suppress the throwing behavior for this.
+	  function onerror(er) {
+	    debug('onerror', er);
+	    unpipe();
+	    dest.removeListener('error', onerror);
+	    if (EE.listenerCount(dest, 'error') === 0)
+	      dest.emit('error', er);
+	  }
+	  // This is a brutally ugly hack to make sure that our error handler
+	  // is attached before any userland ones.  NEVER DO THIS.
+	  if (!dest._events || !dest._events.error)
+	    dest.on('error', onerror);
+	  else if (isArray(dest._events.error))
+	    dest._events.error.unshift(onerror);
+	  else
+	    dest._events.error = [onerror, dest._events.error];
+
+
+
+	  // Both close and finish should trigger unpipe, but only once.
+	  function onclose() {
+	    dest.removeListener('finish', onfinish);
+	    unpipe();
+	  }
+	  dest.once('close', onclose);
+	  function onfinish() {
+	    debug('onfinish');
+	    dest.removeListener('close', onclose);
+	    unpipe();
+	  }
+	  dest.once('finish', onfinish);
+
+	  function unpipe() {
+	    debug('unpipe');
+	    src.unpipe(dest);
+	  }
+
+	  // tell the dest that it's being piped to
+	  dest.emit('pipe', src);
+
+	  // start the flow if it hasn't been started already.
+	  if (!state.flowing) {
+	    debug('pipe resume');
+	    src.resume();
+	  }
+
+	  return dest;
+	};
+
+	function pipeOnDrain(src) {
+	  return function() {
+	    var state = src._readableState;
+	    debug('pipeOnDrain', state.awaitDrain);
+	    if (state.awaitDrain)
+	      state.awaitDrain--;
+	    if (state.awaitDrain === 0 && EE.listenerCount(src, 'data')) {
+	      state.flowing = true;
+	      flow(src);
+	    }
+	  };
+	}
+
+
+	Readable.prototype.unpipe = function(dest) {
+	  var state = this._readableState;
+
+	  // if we're not piping anywhere, then do nothing.
+	  if (state.pipesCount === 0)
+	    return this;
+
+	  // just one destination.  most common case.
+	  if (state.pipesCount === 1) {
+	    // passed in one, but it's not the right one.
+	    if (dest && dest !== state.pipes)
+	      return this;
+
+	    if (!dest)
+	      dest = state.pipes;
+
+	    // got a match.
+	    state.pipes = null;
+	    state.pipesCount = 0;
+	    state.flowing = false;
+	    if (dest)
+	      dest.emit('unpipe', this);
+	    return this;
+	  }
+
+	  // slow case. multiple pipe destinations.
+
+	  if (!dest) {
+	    // remove all.
+	    var dests = state.pipes;
+	    var len = state.pipesCount;
+	    state.pipes = null;
+	    state.pipesCount = 0;
+	    state.flowing = false;
+
+	    for (var i = 0; i < len; i++)
+	      dests[i].emit('unpipe', this);
+	    return this;
+	  }
+
+	  // try to find the right one.
+	  var i = indexOf(state.pipes, dest);
+	  if (i === -1)
+	    return this;
+
+	  state.pipes.splice(i, 1);
+	  state.pipesCount -= 1;
+	  if (state.pipesCount === 1)
+	    state.pipes = state.pipes[0];
+
+	  dest.emit('unpipe', this);
+
+	  return this;
+	};
+
+	// set up data events if they are asked for
+	// Ensure readable listeners eventually get something
+	Readable.prototype.on = function(ev, fn) {
+	  var res = Stream.prototype.on.call(this, ev, fn);
+
+	  // If listening to data, and it has not explicitly been paused,
+	  // then call resume to start the flow of data on the next tick.
+	  if (ev === 'data' && false !== this._readableState.flowing) {
+	    this.resume();
+	  }
+
+	  if (ev === 'readable' && this.readable) {
+	    var state = this._readableState;
+	    if (!state.readableListening) {
+	      state.readableListening = true;
+	      state.emittedReadable = false;
+	      state.needReadable = true;
+	      if (!state.reading) {
+	        var self = this;
+	        process.nextTick(function() {
+	          debug('readable nexttick read 0');
+	          self.read(0);
+	        });
+	      } else if (state.length) {
+	        emitReadable(this, state);
+	      }
+	    }
+	  }
+
+	  return res;
+	};
+	Readable.prototype.addListener = Readable.prototype.on;
+
+	// pause() and resume() are remnants of the legacy readable stream API
+	// If the user uses them, then switch into old mode.
+	Readable.prototype.resume = function() {
+	  var state = this._readableState;
+	  if (!state.flowing) {
+	    debug('resume');
+	    state.flowing = true;
+	    if (!state.reading) {
+	      debug('resume read 0');
+	      this.read(0);
+	    }
+	    resume(this, state);
+	  }
+	  return this;
+	};
+
+	function resume(stream, state) {
+	  if (!state.resumeScheduled) {
+	    state.resumeScheduled = true;
+	    process.nextTick(function() {
+	      resume_(stream, state);
+	    });
+	  }
+	}
+
+	function resume_(stream, state) {
+	  state.resumeScheduled = false;
+	  stream.emit('resume');
+	  flow(stream);
+	  if (state.flowing && !state.reading)
+	    stream.read(0);
+	}
+
+	Readable.prototype.pause = function() {
+	  debug('call pause flowing=%j', this._readableState.flowing);
+	  if (false !== this._readableState.flowing) {
+	    debug('pause');
+	    this._readableState.flowing = false;
+	    this.emit('pause');
+	  }
+	  return this;
+	};
+
+	function flow(stream) {
+	  var state = stream._readableState;
+	  debug('flow', state.flowing);
+	  if (state.flowing) {
+	    do {
+	      var chunk = stream.read();
+	    } while (null !== chunk && state.flowing);
+	  }
+	}
+
+	// wrap an old-style stream as the async data source.
+	// This is *not* part of the readable stream interface.
+	// It is an ugly unfortunate mess of history.
+	Readable.prototype.wrap = function(stream) {
+	  var state = this._readableState;
+	  var paused = false;
+
+	  var self = this;
+	  stream.on('end', function() {
+	    debug('wrapped end');
+	    if (state.decoder && !state.ended) {
+	      var chunk = state.decoder.end();
+	      if (chunk && chunk.length)
+	        self.push(chunk);
+	    }
+
+	    self.push(null);
+	  });
+
+	  stream.on('data', function(chunk) {
+	    debug('wrapped data');
+	    if (state.decoder)
+	      chunk = state.decoder.write(chunk);
+	    if (!chunk || !state.objectMode && !chunk.length)
+	      return;
+
+	    var ret = self.push(chunk);
+	    if (!ret) {
+	      paused = true;
+	      stream.pause();
+	    }
+	  });
+
+	  // proxy all the other methods.
+	  // important when wrapping filters and duplexes.
+	  for (var i in stream) {
+	    if (util.isFunction(stream[i]) && util.isUndefined(this[i])) {
+	      this[i] = function(method) { return function() {
+	        return stream[method].apply(stream, arguments);
+	      }}(i);
+	    }
+	  }
+
+	  // proxy certain important events.
+	  var events = ['error', 'close', 'destroy', 'pause', 'resume'];
+	  forEach(events, function(ev) {
+	    stream.on(ev, self.emit.bind(self, ev));
+	  });
+
+	  // when we try to consume some more bytes, simply unpause the
+	  // underlying stream.
+	  self._read = function(n) {
+	    debug('wrapped _read', n);
+	    if (paused) {
+	      paused = false;
+	      stream.resume();
+	    }
+	  };
+
+	  return self;
+	};
+
+
+
+	// exposed for testing purposes only.
+	Readable._fromList = fromList;
+
+	// Pluck off n bytes from an array of buffers.
+	// Length is the combined lengths of all the buffers in the list.
+	function fromList(n, state) {
+	  var list = state.buffer;
+	  var length = state.length;
+	  var stringMode = !!state.decoder;
+	  var objectMode = !!state.objectMode;
+	  var ret;
+
+	  // nothing in the list, definitely empty.
+	  if (list.length === 0)
+	    return null;
+
+	  if (length === 0)
+	    ret = null;
+	  else if (objectMode)
+	    ret = list.shift();
+	  else if (!n || n >= length) {
+	    // read it all, truncate the array.
+	    if (stringMode)
+	      ret = list.join('');
+	    else
+	      ret = Buffer.concat(list, length);
+	    list.length = 0;
+	  } else {
+	    // read just some of it.
+	    if (n < list[0].length) {
+	      // just take a part of the first list item.
+	      // slice is the same for buffers and strings.
+	      var buf = list[0];
+	      ret = buf.slice(0, n);
+	      list[0] = buf.slice(n);
+	    } else if (n === list[0].length) {
+	      // first list is a perfect match
+	      ret = list.shift();
+	    } else {
+	      // complex case.
+	      // we have enough to cover it, but it spans past the first buffer.
+	      if (stringMode)
+	        ret = '';
+	      else
+	        ret = new Buffer(n);
+
+	      var c = 0;
+	      for (var i = 0, l = list.length; i < l && c < n; i++) {
+	        var buf = list[0];
+	        var cpy = Math.min(n - c, buf.length);
+
+	        if (stringMode)
+	          ret += buf.slice(0, cpy);
+	        else
+	          buf.copy(ret, c, 0, cpy);
+
+	        if (cpy < buf.length)
+	          list[0] = buf.slice(cpy);
+	        else
+	          list.shift();
+
+	        c += cpy;
+	      }
+	    }
+	  }
+
+	  return ret;
+	}
+
+	function endReadable(stream) {
+	  var state = stream._readableState;
+
+	  // If we get here before consuming all the bytes, then that is a
+	  // bug in node.  Should never happen.
+	  if (state.length > 0)
+	    throw new Error('endReadable called on non-empty stream');
+
+	  if (!state.endEmitted) {
+	    state.ended = true;
+	    process.nextTick(function() {
+	      // Check that we didn't get one last unshift.
+	      if (!state.endEmitted && state.length === 0) {
+	        state.endEmitted = true;
+	        stream.readable = false;
+	        stream.emit('end');
+	      }
+	    });
+	  }
+	}
+
+	function forEach (xs, f) {
+	  for (var i = 0, l = xs.length; i < l; i++) {
+	    f(xs[i], i);
+	  }
+	}
+
+	function indexOf (xs, x) {
+	  for (var i = 0, l = xs.length; i < l; i++) {
+	    if (xs[i] === x) return i;
+	  }
+	  return -1;
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 49 */
+/***/ function(module, exports) {
+
+	module.exports = Array.isArray || function (arr) {
+	  return Object.prototype.toString.call(arr) == '[object Array]';
+	};
+
+
+/***/ },
+/* 50 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(Buffer) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	// NOTE: These type checking functions intentionally don't use `instanceof`
+	// because it is fragile and can be easily faked with `Object.create()`.
+
+	function isArray(arg) {
+	  if (Array.isArray) {
+	    return Array.isArray(arg);
+	  }
+	  return objectToString(arg) === '[object Array]';
+	}
+	exports.isArray = isArray;
+
+	function isBoolean(arg) {
+	  return typeof arg === 'boolean';
+	}
+	exports.isBoolean = isBoolean;
+
+	function isNull(arg) {
+	  return arg === null;
+	}
+	exports.isNull = isNull;
+
+	function isNullOrUndefined(arg) {
+	  return arg == null;
+	}
+	exports.isNullOrUndefined = isNullOrUndefined;
+
+	function isNumber(arg) {
+	  return typeof arg === 'number';
+	}
+	exports.isNumber = isNumber;
+
+	function isString(arg) {
+	  return typeof arg === 'string';
+	}
+	exports.isString = isString;
+
+	function isSymbol(arg) {
+	  return typeof arg === 'symbol';
+	}
+	exports.isSymbol = isSymbol;
+
+	function isUndefined(arg) {
+	  return arg === void 0;
+	}
+	exports.isUndefined = isUndefined;
+
+	function isRegExp(re) {
+	  return objectToString(re) === '[object RegExp]';
+	}
+	exports.isRegExp = isRegExp;
+
+	function isObject(arg) {
+	  return typeof arg === 'object' && arg !== null;
+	}
+	exports.isObject = isObject;
+
+	function isDate(d) {
+	  return objectToString(d) === '[object Date]';
+	}
+	exports.isDate = isDate;
+
+	function isError(e) {
+	  return (objectToString(e) === '[object Error]' || e instanceof Error);
+	}
+	exports.isError = isError;
+
+	function isFunction(arg) {
+	  return typeof arg === 'function';
+	}
+	exports.isFunction = isFunction;
+
+	function isPrimitive(arg) {
+	  return arg === null ||
+	         typeof arg === 'boolean' ||
+	         typeof arg === 'number' ||
+	         typeof arg === 'string' ||
+	         typeof arg === 'symbol' ||  // ES6 symbol
+	         typeof arg === 'undefined';
+	}
+	exports.isPrimitive = isPrimitive;
+
+	exports.isBuffer = Buffer.isBuffer;
+
+	function objectToString(o) {
+	  return Object.prototype.toString.call(o);
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
+
+/***/ },
+/* 51 */
+/***/ function(module, exports) {
+
+	/* (ignored) */
+
+/***/ },
+/* 52 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	// a duplex stream is just a stream that is both readable and writable.
+	// Since JS doesn't have multiple prototypal inheritance, this class
+	// prototypally inherits from Readable, and then parasitically from
+	// Writable.
+
+	module.exports = Duplex;
+
+	/*<replacement>*/
+	var objectKeys = Object.keys || function (obj) {
+	  var keys = [];
+	  for (var key in obj) keys.push(key);
+	  return keys;
+	}
+	/*</replacement>*/
+
+
+	/*<replacement>*/
+	var util = __webpack_require__(50);
+	util.inherits = __webpack_require__(46);
+	/*</replacement>*/
+
+	var Readable = __webpack_require__(48);
+	var Writable = __webpack_require__(53);
+
+	util.inherits(Duplex, Readable);
+
+	forEach(objectKeys(Writable.prototype), function(method) {
+	  if (!Duplex.prototype[method])
+	    Duplex.prototype[method] = Writable.prototype[method];
+	});
+
+	function Duplex(options) {
+	  if (!(this instanceof Duplex))
+	    return new Duplex(options);
+
+	  Readable.call(this, options);
+	  Writable.call(this, options);
+
+	  if (options && options.readable === false)
+	    this.readable = false;
+
+	  if (options && options.writable === false)
+	    this.writable = false;
+
+	  this.allowHalfOpen = true;
+	  if (options && options.allowHalfOpen === false)
+	    this.allowHalfOpen = false;
+
+	  this.once('end', onend);
+	}
+
+	// the no-half-open enforcer
+	function onend() {
+	  // if we allow half-open state, or if the writable side ended,
+	  // then we're ok.
+	  if (this.allowHalfOpen || this._writableState.ended)
+	    return;
+
+	  // no more data can be written.
+	  // But allow more writes to happen in this tick.
+	  process.nextTick(this.end.bind(this));
+	}
+
+	function forEach (xs, f) {
+	  for (var i = 0, l = xs.length; i < l; i++) {
+	    f(xs[i], i);
+	  }
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 53 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	// A bit simpler than readable streams.
+	// Implement an async ._write(chunk, cb), and it'll handle all
+	// the drain event emission and buffering.
+
+	module.exports = Writable;
+
+	/*<replacement>*/
+	var Buffer = __webpack_require__(8).Buffer;
+	/*</replacement>*/
+
+	Writable.WritableState = WritableState;
+
+
+	/*<replacement>*/
+	var util = __webpack_require__(50);
+	util.inherits = __webpack_require__(46);
+	/*</replacement>*/
+
+	var Stream = __webpack_require__(44);
+
+	util.inherits(Writable, Stream);
+
+	function WriteReq(chunk, encoding, cb) {
+	  this.chunk = chunk;
+	  this.encoding = encoding;
+	  this.callback = cb;
+	}
+
+	function WritableState(options, stream) {
+	  var Duplex = __webpack_require__(52);
+
+	  options = options || {};
+
+	  // the point at which write() starts returning false
+	  // Note: 0 is a valid value, means that we always return false if
+	  // the entire buffer is not flushed immediately on write()
+	  var hwm = options.highWaterMark;
+	  var defaultHwm = options.objectMode ? 16 : 16 * 1024;
+	  this.highWaterMark = (hwm || hwm === 0) ? hwm : defaultHwm;
+
+	  // object stream flag to indicate whether or not this stream
+	  // contains buffers or objects.
+	  this.objectMode = !!options.objectMode;
+
+	  if (stream instanceof Duplex)
+	    this.objectMode = this.objectMode || !!options.writableObjectMode;
+
+	  // cast to ints.
+	  this.highWaterMark = ~~this.highWaterMark;
+
+	  this.needDrain = false;
+	  // at the start of calling end()
+	  this.ending = false;
+	  // when end() has been called, and returned
+	  this.ended = false;
+	  // when 'finish' is emitted
+	  this.finished = false;
+
+	  // should we decode strings into buffers before passing to _write?
+	  // this is here so that some node-core streams can optimize string
+	  // handling at a lower level.
+	  var noDecode = options.decodeStrings === false;
+	  this.decodeStrings = !noDecode;
+
+	  // Crypto is kind of old and crusty.  Historically, its default string
+	  // encoding is 'binary' so we have to make this configurable.
+	  // Everything else in the universe uses 'utf8', though.
+	  this.defaultEncoding = options.defaultEncoding || 'utf8';
+
+	  // not an actual buffer we keep track of, but a measurement
+	  // of how much we're waiting to get pushed to some underlying
+	  // socket or file.
+	  this.length = 0;
+
+	  // a flag to see when we're in the middle of a write.
+	  this.writing = false;
+
+	  // when true all writes will be buffered until .uncork() call
+	  this.corked = 0;
+
+	  // a flag to be able to tell if the onwrite cb is called immediately,
+	  // or on a later tick.  We set this to true at first, because any
+	  // actions that shouldn't happen until "later" should generally also
+	  // not happen before the first write call.
+	  this.sync = true;
+
+	  // a flag to know if we're processing previously buffered items, which
+	  // may call the _write() callback in the same tick, so that we don't
+	  // end up in an overlapped onwrite situation.
+	  this.bufferProcessing = false;
+
+	  // the callback that's passed to _write(chunk,cb)
+	  this.onwrite = function(er) {
+	    onwrite(stream, er);
+	  };
+
+	  // the callback that the user supplies to write(chunk,encoding,cb)
+	  this.writecb = null;
+
+	  // the amount that is being written when _write is called.
+	  this.writelen = 0;
+
+	  this.buffer = [];
+
+	  // number of pending user-supplied write callbacks
+	  // this must be 0 before 'finish' can be emitted
+	  this.pendingcb = 0;
+
+	  // emit prefinish if the only thing we're waiting for is _write cbs
+	  // This is relevant for synchronous Transform streams
+	  this.prefinished = false;
+
+	  // True if the error was already emitted and should not be thrown again
+	  this.errorEmitted = false;
+	}
+
+	function Writable(options) {
+	  var Duplex = __webpack_require__(52);
+
+	  // Writable ctor is applied to Duplexes, though they're not
+	  // instanceof Writable, they're instanceof Readable.
+	  if (!(this instanceof Writable) && !(this instanceof Duplex))
+	    return new Writable(options);
+
+	  this._writableState = new WritableState(options, this);
+
+	  // legacy.
+	  this.writable = true;
+
+	  Stream.call(this);
+	}
+
+	// Otherwise people can pipe Writable streams, which is just wrong.
+	Writable.prototype.pipe = function() {
+	  this.emit('error', new Error('Cannot pipe. Not readable.'));
+	};
+
+
+	function writeAfterEnd(stream, state, cb) {
+	  var er = new Error('write after end');
+	  // TODO: defer error events consistently everywhere, not just the cb
+	  stream.emit('error', er);
+	  process.nextTick(function() {
+	    cb(er);
+	  });
+	}
+
+	// If we get something that is not a buffer, string, null, or undefined,
+	// and we're not in objectMode, then that's an error.
+	// Otherwise stream chunks are all considered to be of length=1, and the
+	// watermarks determine how many objects to keep in the buffer, rather than
+	// how many bytes or characters.
+	function validChunk(stream, state, chunk, cb) {
+	  var valid = true;
+	  if (!util.isBuffer(chunk) &&
+	      !util.isString(chunk) &&
+	      !util.isNullOrUndefined(chunk) &&
+	      !state.objectMode) {
+	    var er = new TypeError('Invalid non-string/buffer chunk');
+	    stream.emit('error', er);
+	    process.nextTick(function() {
+	      cb(er);
+	    });
+	    valid = false;
+	  }
+	  return valid;
+	}
+
+	Writable.prototype.write = function(chunk, encoding, cb) {
+	  var state = this._writableState;
+	  var ret = false;
+
+	  if (util.isFunction(encoding)) {
+	    cb = encoding;
+	    encoding = null;
+	  }
+
+	  if (util.isBuffer(chunk))
+	    encoding = 'buffer';
+	  else if (!encoding)
+	    encoding = state.defaultEncoding;
+
+	  if (!util.isFunction(cb))
+	    cb = function() {};
+
+	  if (state.ended)
+	    writeAfterEnd(this, state, cb);
+	  else if (validChunk(this, state, chunk, cb)) {
+	    state.pendingcb++;
+	    ret = writeOrBuffer(this, state, chunk, encoding, cb);
+	  }
+
+	  return ret;
+	};
+
+	Writable.prototype.cork = function() {
+	  var state = this._writableState;
+
+	  state.corked++;
+	};
+
+	Writable.prototype.uncork = function() {
+	  var state = this._writableState;
+
+	  if (state.corked) {
+	    state.corked--;
+
+	    if (!state.writing &&
+	        !state.corked &&
+	        !state.finished &&
+	        !state.bufferProcessing &&
+	        state.buffer.length)
+	      clearBuffer(this, state);
+	  }
+	};
+
+	function decodeChunk(state, chunk, encoding) {
+	  if (!state.objectMode &&
+	      state.decodeStrings !== false &&
+	      util.isString(chunk)) {
+	    chunk = new Buffer(chunk, encoding);
+	  }
+	  return chunk;
+	}
+
+	// if we're already writing something, then just put this
+	// in the queue, and wait our turn.  Otherwise, call _write
+	// If we return false, then we need a drain event, so set that flag.
+	function writeOrBuffer(stream, state, chunk, encoding, cb) {
+	  chunk = decodeChunk(state, chunk, encoding);
+	  if (util.isBuffer(chunk))
+	    encoding = 'buffer';
+	  var len = state.objectMode ? 1 : chunk.length;
+
+	  state.length += len;
+
+	  var ret = state.length < state.highWaterMark;
+	  // we must ensure that previous needDrain will not be reset to false.
+	  if (!ret)
+	    state.needDrain = true;
+
+	  if (state.writing || state.corked)
+	    state.buffer.push(new WriteReq(chunk, encoding, cb));
+	  else
+	    doWrite(stream, state, false, len, chunk, encoding, cb);
+
+	  return ret;
+	}
+
+	function doWrite(stream, state, writev, len, chunk, encoding, cb) {
+	  state.writelen = len;
+	  state.writecb = cb;
+	  state.writing = true;
+	  state.sync = true;
+	  if (writev)
+	    stream._writev(chunk, state.onwrite);
+	  else
+	    stream._write(chunk, encoding, state.onwrite);
+	  state.sync = false;
+	}
+
+	function onwriteError(stream, state, sync, er, cb) {
+	  if (sync)
+	    process.nextTick(function() {
+	      state.pendingcb--;
+	      cb(er);
+	    });
+	  else {
+	    state.pendingcb--;
+	    cb(er);
+	  }
+
+	  stream._writableState.errorEmitted = true;
+	  stream.emit('error', er);
+	}
+
+	function onwriteStateUpdate(state) {
+	  state.writing = false;
+	  state.writecb = null;
+	  state.length -= state.writelen;
+	  state.writelen = 0;
+	}
+
+	function onwrite(stream, er) {
+	  var state = stream._writableState;
+	  var sync = state.sync;
+	  var cb = state.writecb;
+
+	  onwriteStateUpdate(state);
+
+	  if (er)
+	    onwriteError(stream, state, sync, er, cb);
+	  else {
+	    // Check if we're actually ready to finish, but don't emit yet
+	    var finished = needFinish(stream, state);
+
+	    if (!finished &&
+	        !state.corked &&
+	        !state.bufferProcessing &&
+	        state.buffer.length) {
+	      clearBuffer(stream, state);
+	    }
+
+	    if (sync) {
+	      process.nextTick(function() {
+	        afterWrite(stream, state, finished, cb);
+	      });
+	    } else {
+	      afterWrite(stream, state, finished, cb);
+	    }
+	  }
+	}
+
+	function afterWrite(stream, state, finished, cb) {
+	  if (!finished)
+	    onwriteDrain(stream, state);
+	  state.pendingcb--;
+	  cb();
+	  finishMaybe(stream, state);
+	}
+
+	// Must force callback to be called on nextTick, so that we don't
+	// emit 'drain' before the write() consumer gets the 'false' return
+	// value, and has a chance to attach a 'drain' listener.
+	function onwriteDrain(stream, state) {
+	  if (state.length === 0 && state.needDrain) {
+	    state.needDrain = false;
+	    stream.emit('drain');
+	  }
+	}
+
+
+	// if there's something in the buffer waiting, then process it
+	function clearBuffer(stream, state) {
+	  state.bufferProcessing = true;
+
+	  if (stream._writev && state.buffer.length > 1) {
+	    // Fast case, write everything using _writev()
+	    var cbs = [];
+	    for (var c = 0; c < state.buffer.length; c++)
+	      cbs.push(state.buffer[c].callback);
+
+	    // count the one we are adding, as well.
+	    // TODO(isaacs) clean this up
+	    state.pendingcb++;
+	    doWrite(stream, state, true, state.length, state.buffer, '', function(err) {
+	      for (var i = 0; i < cbs.length; i++) {
+	        state.pendingcb--;
+	        cbs[i](err);
+	      }
+	    });
+
+	    // Clear buffer
+	    state.buffer = [];
+	  } else {
+	    // Slow case, write chunks one-by-one
+	    for (var c = 0; c < state.buffer.length; c++) {
+	      var entry = state.buffer[c];
+	      var chunk = entry.chunk;
+	      var encoding = entry.encoding;
+	      var cb = entry.callback;
+	      var len = state.objectMode ? 1 : chunk.length;
+
+	      doWrite(stream, state, false, len, chunk, encoding, cb);
+
+	      // if we didn't call the onwrite immediately, then
+	      // it means that we need to wait until it does.
+	      // also, that means that the chunk and cb are currently
+	      // being processed, so move the buffer counter past them.
+	      if (state.writing) {
+	        c++;
+	        break;
+	      }
+	    }
+
+	    if (c < state.buffer.length)
+	      state.buffer = state.buffer.slice(c);
+	    else
+	      state.buffer.length = 0;
+	  }
+
+	  state.bufferProcessing = false;
+	}
+
+	Writable.prototype._write = function(chunk, encoding, cb) {
+	  cb(new Error('not implemented'));
+
+	};
+
+	Writable.prototype._writev = null;
+
+	Writable.prototype.end = function(chunk, encoding, cb) {
+	  var state = this._writableState;
+
+	  if (util.isFunction(chunk)) {
+	    cb = chunk;
+	    chunk = null;
+	    encoding = null;
+	  } else if (util.isFunction(encoding)) {
+	    cb = encoding;
+	    encoding = null;
+	  }
+
+	  if (!util.isNullOrUndefined(chunk))
+	    this.write(chunk, encoding);
+
+	  // .end() fully uncorks
+	  if (state.corked) {
+	    state.corked = 1;
+	    this.uncork();
+	  }
+
+	  // ignore unnecessary end() calls.
+	  if (!state.ending && !state.finished)
+	    endWritable(this, state, cb);
+	};
+
+
+	function needFinish(stream, state) {
+	  return (state.ending &&
+	          state.length === 0 &&
+	          !state.finished &&
+	          !state.writing);
+	}
+
+	function prefinish(stream, state) {
+	  if (!state.prefinished) {
+	    state.prefinished = true;
+	    stream.emit('prefinish');
+	  }
+	}
+
+	function finishMaybe(stream, state) {
+	  var need = needFinish(stream, state);
+	  if (need) {
+	    if (state.pendingcb === 0) {
+	      prefinish(stream, state);
+	      state.finished = true;
+	      stream.emit('finish');
+	    } else
+	      prefinish(stream, state);
+	  }
+	  return need;
+	}
+
+	function endWritable(stream, state, cb) {
+	  state.ending = true;
+	  finishMaybe(stream, state);
+	  if (cb) {
+	    if (state.finished)
+	      process.nextTick(cb);
+	    else
+	      stream.once('finish', cb);
+	  }
+	  state.ended = true;
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 54 */
+/***/ function(module, exports, __webpack_require__) {
+
+	// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	var Buffer = __webpack_require__(8).Buffer;
+
+	var isBufferEncoding = Buffer.isEncoding
+	  || function(encoding) {
+	       switch (encoding && encoding.toLowerCase()) {
+	         case 'hex': case 'utf8': case 'utf-8': case 'ascii': case 'binary': case 'base64': case 'ucs2': case 'ucs-2': case 'utf16le': case 'utf-16le': case 'raw': return true;
+	         default: return false;
+	       }
+	     }
+
+
+	function assertEncoding(encoding) {
+	  if (encoding && !isBufferEncoding(encoding)) {
+	    throw new Error('Unknown encoding: ' + encoding);
+	  }
+	}
+
+	// StringDecoder provides an interface for efficiently splitting a series of
+	// buffers into a series of JS strings without breaking apart multi-byte
+	// characters. CESU-8 is handled as part of the UTF-8 encoding.
+	//
+	// @TODO Handling all encodings inside a single object makes it very difficult
+	// to reason about this code, so it should be split up in the future.
+	// @TODO There should be a utf8-strict encoding that rejects invalid UTF-8 code
+	// points as used by CESU-8.
+	var StringDecoder = exports.StringDecoder = function(encoding) {
+	  this.encoding = (encoding || 'utf8').toLowerCase().replace(/[-_]/, '');
+	  assertEncoding(encoding);
+	  switch (this.encoding) {
+	    case 'utf8':
+	      // CESU-8 represents each of Surrogate Pair by 3-bytes
+	      this.surrogateSize = 3;
+	      break;
+	    case 'ucs2':
+	    case 'utf16le':
+	      // UTF-16 represents each of Surrogate Pair by 2-bytes
+	      this.surrogateSize = 2;
+	      this.detectIncompleteChar = utf16DetectIncompleteChar;
+	      break;
+	    case 'base64':
+	      // Base-64 stores 3 bytes in 4 chars, and pads the remainder.
+	      this.surrogateSize = 3;
+	      this.detectIncompleteChar = base64DetectIncompleteChar;
+	      break;
+	    default:
+	      this.write = passThroughWrite;
+	      return;
+	  }
+
+	  // Enough space to store all bytes of a single character. UTF-8 needs 4
+	  // bytes, but CESU-8 may require up to 6 (3 bytes per surrogate).
+	  this.charBuffer = new Buffer(6);
+	  // Number of bytes received for the current incomplete multi-byte character.
+	  this.charReceived = 0;
+	  // Number of bytes expected for the current incomplete multi-byte character.
+	  this.charLength = 0;
+	};
+
+
+	// write decodes the given buffer and returns it as JS string that is
+	// guaranteed to not contain any partial multi-byte characters. Any partial
+	// character found at the end of the buffer is buffered up, and will be
+	// returned when calling write again with the remaining bytes.
+	//
+	// Note: Converting a Buffer containing an orphan surrogate to a String
+	// currently works, but converting a String to a Buffer (via `new Buffer`, or
+	// Buffer#write) will replace incomplete surrogates with the unicode
+	// replacement character. See https://codereview.chromium.org/121173009/ .
+	StringDecoder.prototype.write = function(buffer) {
+	  var charStr = '';
+	  // if our last write ended with an incomplete multibyte character
+	  while (this.charLength) {
+	    // determine how many remaining bytes this buffer has to offer for this char
+	    var available = (buffer.length >= this.charLength - this.charReceived) ?
+	        this.charLength - this.charReceived :
+	        buffer.length;
+
+	    // add the new bytes to the char buffer
+	    buffer.copy(this.charBuffer, this.charReceived, 0, available);
+	    this.charReceived += available;
+
+	    if (this.charReceived < this.charLength) {
+	      // still not enough chars in this buffer? wait for more ...
+	      return '';
+	    }
+
+	    // remove bytes belonging to the current character from the buffer
+	    buffer = buffer.slice(available, buffer.length);
+
+	    // get the character that was split
+	    charStr = this.charBuffer.slice(0, this.charLength).toString(this.encoding);
+
+	    // CESU-8: lead surrogate (D800-DBFF) is also the incomplete character
+	    var charCode = charStr.charCodeAt(charStr.length - 1);
+	    if (charCode >= 0xD800 && charCode <= 0xDBFF) {
+	      this.charLength += this.surrogateSize;
+	      charStr = '';
+	      continue;
+	    }
+	    this.charReceived = this.charLength = 0;
+
+	    // if there are no more bytes in this buffer, just emit our char
+	    if (buffer.length === 0) {
+	      return charStr;
+	    }
+	    break;
+	  }
+
+	  // determine and set charLength / charReceived
+	  this.detectIncompleteChar(buffer);
+
+	  var end = buffer.length;
+	  if (this.charLength) {
+	    // buffer the incomplete character bytes we got
+	    buffer.copy(this.charBuffer, 0, buffer.length - this.charReceived, end);
+	    end -= this.charReceived;
+	  }
+
+	  charStr += buffer.toString(this.encoding, 0, end);
+
+	  var end = charStr.length - 1;
+	  var charCode = charStr.charCodeAt(end);
+	  // CESU-8: lead surrogate (D800-DBFF) is also the incomplete character
+	  if (charCode >= 0xD800 && charCode <= 0xDBFF) {
+	    var size = this.surrogateSize;
+	    this.charLength += size;
+	    this.charReceived += size;
+	    this.charBuffer.copy(this.charBuffer, size, 0, size);
+	    buffer.copy(this.charBuffer, 0, 0, size);
+	    return charStr.substring(0, end);
+	  }
+
+	  // or just emit the charStr
+	  return charStr;
+	};
+
+	// detectIncompleteChar determines if there is an incomplete UTF-8 character at
+	// the end of the given buffer. If so, it sets this.charLength to the byte
+	// length that character, and sets this.charReceived to the number of bytes
+	// that are available for this character.
+	StringDecoder.prototype.detectIncompleteChar = function(buffer) {
+	  // determine how many bytes we have to check at the end of this buffer
+	  var i = (buffer.length >= 3) ? 3 : buffer.length;
+
+	  // Figure out if one of the last i bytes of our buffer announces an
+	  // incomplete char.
+	  for (; i > 0; i--) {
+	    var c = buffer[buffer.length - i];
+
+	    // See http://en.wikipedia.org/wiki/UTF-8#Description
+
+	    // 110XXXXX
+	    if (i == 1 && c >> 5 == 0x06) {
+	      this.charLength = 2;
+	      break;
+	    }
+
+	    // 1110XXXX
+	    if (i <= 2 && c >> 4 == 0x0E) {
+	      this.charLength = 3;
+	      break;
+	    }
+
+	    // 11110XXX
+	    if (i <= 3 && c >> 3 == 0x1E) {
+	      this.charLength = 4;
+	      break;
+	    }
+	  }
+	  this.charReceived = i;
+	};
+
+	StringDecoder.prototype.end = function(buffer) {
+	  var res = '';
+	  if (buffer && buffer.length)
+	    res = this.write(buffer);
+
+	  if (this.charReceived) {
+	    var cr = this.charReceived;
+	    var buf = this.charBuffer;
+	    var enc = this.encoding;
+	    res += buf.slice(0, cr).toString(enc);
+	  }
+
+	  return res;
+	};
+
+	function passThroughWrite(buffer) {
+	  return buffer.toString(this.encoding);
+	}
+
+	function utf16DetectIncompleteChar(buffer) {
+	  this.charReceived = buffer.length % 2;
+	  this.charLength = this.charReceived ? 2 : 0;
+	}
+
+	function base64DetectIncompleteChar(buffer) {
+	  this.charReceived = buffer.length % 3;
+	  this.charLength = this.charReceived ? 3 : 0;
+	}
+
+
+/***/ },
+/* 55 */
+/***/ function(module, exports, __webpack_require__) {
+
+	// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+	// a transform stream is a readable/writable stream where you do
+	// something with the data.  Sometimes it's called a "filter",
+	// but that's not a great name for it, since that implies a thing where
+	// some bits pass through, and others are simply ignored.  (That would
+	// be a valid example of a transform, of course.)
+	//
+	// While the output is causally related to the input, it's not a
+	// necessarily symmetric or synchronous transformation.  For example,
+	// a zlib stream might take multiple plain-text writes(), and then
+	// emit a single compressed chunk some time in the future.
+	//
+	// Here's how this works:
+	//
+	// The Transform stream has all the aspects of the readable and writable
+	// stream classes.  When you write(chunk), that calls _write(chunk,cb)
+	// internally, and returns false if there's a lot of pending writes
+	// buffered up.  When you call read(), that calls _read(n) until
+	// there's enough pending readable data buffered up.
+	//
+	// In a transform stream, the written data is placed in a buffer.  When
+	// _read(n) is called, it transforms the queued up data, calling the
+	// buffered _write cb's as it consumes chunks.  If consuming a single
+	// written chunk would result in multiple output chunks, then the first
+	// outputted bit calls the readcb, and subsequent chunks just go into
+	// the read buffer, and will cause it to emit 'readable' if necessary.
+	//
+	// This way, back-pressure is actually determined by the reading side,
+	// since _read has to be called to start processing a new chunk.  However,
+	// a pathological inflate type of transform can cause excessive buffering
+	// here.  For example, imagine a stream where every byte of input is
+	// interpreted as an integer from 0-255, and then results in that many
+	// bytes of output.  Writing the 4 bytes {ff,ff,ff,ff} would result in
+	// 1kb of data being output.  In this case, you could write a very small
+	// amount of input, and end up with a very large amount of output.  In
+	// such a pathological inflating mechanism, there'd be no way to tell
+	// the system to stop doing the transform.  A single 4MB write could
+	// cause the system to run out of memory.
+	//
+	// However, even in such a pathological case, only a single written chunk
+	// would be consumed, and then the rest would wait (un-transformed) until
+	// the results of the previous transformed chunk were consumed.
+
+	module.exports = Transform;
+
+	var Duplex = __webpack_require__(52);
+
+	/*<replacement>*/
+	var util = __webpack_require__(50);
+	util.inherits = __webpack_require__(46);
+	/*</replacement>*/
+
+	util.inherits(Transform, Duplex);
+
+
+	function TransformState(options, stream) {
+	  this.afterTransform = function(er, data) {
+	    return afterTransform(stream, er, data);
+	  };
+
+	  this.needTransform = false;
+	  this.transforming = false;
+	  this.writecb = null;
+	  this.writechunk = null;
+	}
+
+	function afterTransform(stream, er, data) {
+	  var ts = stream._transformState;
+	  ts.transforming = false;
+
+	  var cb = ts.writecb;
+
+	  if (!cb)
+	    return stream.emit('error', new Error('no writecb in Transform class'));
+
+	  ts.writechunk = null;
+	  ts.writecb = null;
+
+	  if (!util.isNullOrUndefined(data))
+	    stream.push(data);
+
+	  if (cb)
+	    cb(er);
+
+	  var rs = stream._readableState;
+	  rs.reading = false;
+	  if (rs.needReadable || rs.length < rs.highWaterMark) {
+	    stream._read(rs.highWaterMark);
+	  }
+	}
+
+
+	function Transform(options) {
+	  if (!(this instanceof Transform))
+	    return new Transform(options);
+
+	  Duplex.call(this, options);
+
+	  this._transformState = new TransformState(options, this);
+
+	  // when the writable side finishes, then flush out anything remaining.
+	  var stream = this;
+
+	  // start out asking for a readable event once data is transformed.
+	  this._readableState.needReadable = true;
+
+	  // we have implemented the _read method, and done the other things
+	  // that Readable wants before the first _read call, so unset the
+	  // sync guard flag.
+	  this._readableState.sync = false;
+
+	  this.once('prefinish', function() {
+	    if (util.isFunction(this._flush))
+	      this._flush(function(er) {
+	        done(stream, er);
+	      });
+	    else
+	      done(stream);
+	  });
+	}
+
+	Transform.prototype.push = function(chunk, encoding) {
+	  this._transformState.needTransform = false;
+	  return Duplex.prototype.push.call(this, chunk, encoding);
+	};
+
+	// This is the part where you do stuff!
+	// override this function in implementation classes.
+	// 'chunk' is an input chunk.
+	//
+	// Call `push(newChunk)` to pass along transformed output
+	// to the readable side.  You may call 'push' zero or more times.
+	//
+	// Call `cb(err)` when you are done with this chunk.  If you pass
+	// an error, then that'll put the hurt on the whole operation.  If you
+	// never call cb(), then you'll never get another chunk.
+	Transform.prototype._transform = function(chunk, encoding, cb) {
+	  throw new Error('not implemented');
+	};
+
+	Transform.prototype._write = function(chunk, encoding, cb) {
+	  var ts = this._transformState;
+	  ts.writecb = cb;
+	  ts.writechunk = chunk;
+	  ts.writeencoding = encoding;
+	  if (!ts.transforming) {
+	    var rs = this._readableState;
+	    if (ts.needTransform ||
+	        rs.needReadable ||
+	        rs.length < rs.highWaterMark)
+	      this._read(rs.highWaterMark);
+	  }
+	};
+
+	// Doesn't matter what the args are here.
+	// _transform does all the work.
+	// That we got here means that the readable side wants more data.
+	Transform.prototype._read = function(n) {
+	  var ts = this._transformState;
+
+	  if (!util.isNull(ts.writechunk) && ts.writecb && !ts.transforming) {
+	    ts.transforming = true;
+	    this._transform(ts.writechunk, ts.writeencoding, ts.afterTransform);
+	  } else {
+	    // mark that we need a transform, so that any data that comes in
+	    // will get processed, now that we've asked for it.
+	    ts.needTransform = true;
+	  }
+	};
+
+
+	function done(stream, er) {
+	  if (er)
+	    return stream.emit('error', er);
+
+	  // if there's nothing in the write buffer, then that means
+	  // that nothing more will ever be provided
+	  var ws = stream._writableState;
+	  var ts = stream._transformState;
+
+	  if (ws.length)
+	    throw new Error('calling transform done when ws.length != 0');
+
+	  if (ts.transforming)
+	    throw new Error('calling transform done when still transforming');
+
+	  return stream.push(null);
+	}
+
+
+/***/ },
+/* 56 */
+/***/ function(module, exports, __webpack_require__) {
+
+	// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	// a passthrough stream.
+	// basically just the most minimal sort of Transform stream.
+	// Every written chunk gets output as-is.
+
+	module.exports = PassThrough;
+
+	var Transform = __webpack_require__(55);
+
+	/*<replacement>*/
+	var util = __webpack_require__(50);
+	util.inherits = __webpack_require__(46);
+	/*</replacement>*/
+
+	util.inherits(PassThrough, Transform);
+
+	function PassThrough(options) {
+	  if (!(this instanceof PassThrough))
+	    return new PassThrough(options);
+
+	  Transform.call(this, options);
+	}
+
+	PassThrough.prototype._transform = function(chunk, encoding, cb) {
+	  cb(null, chunk);
+	};
+
+
+/***/ },
+/* 57 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(53)
+
+
+/***/ },
+/* 58 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(52)
+
+
+/***/ },
+/* 59 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(55)
+
+
+/***/ },
+/* 60 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = __webpack_require__(56)
+
+
+/***/ },
+/* 61 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(process) {var extended = __webpack_require__(31),
+	    isUndefined = extended.isUndefined,
+	    spreadArgs = extended.spreadArgs,
+	    util = __webpack_require__(62),
+	    out = process.stdout,
+	    stream = __webpack_require__(44),
+	    EMPTY = /^\s*(?:''|"")?\s*(?:,\s*(?:''|"")?\s*)*$/,
+	    DEFAULT_DELIMITER = ",",
+	    createParser = __webpack_require__(65),
+	    fs = __webpack_require__(12),
+	    StringDecoder = __webpack_require__(66).StringDecoder,
+	    hasIsPaused = !!stream.Transform.prototype.isPaused;
+
+	function ParserStream(options) {
+	    options = options || {};
+	    options.objectMode = extended.has(options, "objectMode") ? options.objectMode : true;
+	    stream.Transform.call(this, options);
+	    this.lines = "";
+	    this.decoder = new StringDecoder();
+	    this._parsedHeaders = false;
+	    this._rowCount = -1;
+	    this._emitData = false;
+	    var delimiter;
+	    if (extended.has(options, "delimiter")) {
+	        delimiter = options.delimiter;
+	        if (delimiter.length > 1) {
+	            throw new Error("delimiter option must be one character long");
+	        }
+	        delimiter = extended.escape(delimiter);
+	    } else {
+	        delimiter = DEFAULT_DELIMITER;
+	    }
+	    options.delimiter = delimiter;
+	    this.parser = createParser(options);
+	    this._headers = options.headers;
+	    this._renameHeaders = options.renameHeaders;
+	    this._ignoreEmpty = options.ignoreEmpty;
+	    this._discardUnmappedColumns = options.discardUnmappedColumns;
+	    this._strictColumnHandling = options.strictColumnHandling;
+	    this.__objectMode = options.objectMode;
+	    this.__buffered = [];
+	    return this;
+	}
+
+	util.inherits(ParserStream, stream.Transform);
+
+	var origOn = ParserStream.prototype.on,
+	    origEmit = ParserStream.prototype.emit;
+
+
+	extended(ParserStream).extend({
+
+	    __pausedDone: null,
+
+	    __endEmitted: false,
+
+	    __emittedData: false,
+
+	    __handleLine: function __parseLineData(line, index, ignore, next) {
+	        var ignoreEmpty = this._ignoreEmpty, self = this;
+	        if (extended.isBoolean(ignoreEmpty) && ignoreEmpty && (!line || EMPTY.test(line.join("")))) {
+	            return next(null, null);
+	        }
+	        if (!ignore) {
+	            this.__transform(line, function (err, line) {
+	                if (err) {
+	                    next(err);
+	                } else {
+	                    self.__validate(line, function (err, isValid, reason) {
+	                        if (err) {
+	                            next(err);
+	                        } else if (isValid) {
+	                            next(null, line);
+	                        } else {
+	                            self.emit("data-invalid", line, index, reason);
+	                            next(null, null);
+	                        }
+	                    });
+	                }
+	            });
+	        } else {
+	            return next(null, line);
+	        }
+	    },
+
+	    __processRows: function (rows, data, cb) {
+	        var self = this, count;
+	        extended.asyncEach(rows, function (row, cb) {
+	            if (row) {
+	                self.__handleLine(row, (count = ++self._rowCount), false, function (err, dataRow) {
+	                    if (err) {
+	                        cb(err);
+	                    } else {
+	                        if (dataRow) {
+	                            if (!self.isStreamPaused()) {
+	                                self.__emitRecord(dataRow, count);
+	                            } else {
+	                                self.__buffered.push([dataRow, count]);
+	                            }
+	                        } else {
+	                            count = --self._rowCount;
+	                        }
+	                        cb();
+	                    }
+	                });
+	            }
+	        }, function (err) {
+	            if (err) {
+	                cb(err);
+	            } else {
+	                cb(null, data.line);
+	            }
+	        });
+	    },
+
+	    __processHeaders: function (rows, cb) {
+	        var headers = this._headers,
+	            renameHeaders = this._renameHeaders,
+	            discardUnmappedColumns = this._discardUnmappedColumns,
+	            strictColumnHandling = this._strictColumnHandling,
+	            self = this;
+
+	        function headerHandler(err, headers) {
+	            if (err) {
+	                cb(err);
+	            } else if (extended.isArray(headers)) {
+	                var headersLength = headers.length,
+	                    orig = self.__transform;
+	                self.__transform = function (data, cb) {
+	                    var ret = {}, i = -1, val;
+	                    if (data.length > headersLength) {
+	                        if (discardUnmappedColumns) {
+	                            data.splice(headersLength);
+	                        } else if (strictColumnHandling) {
+	                            self.emit("data-invalid", data);
+	                            return orig(null, cb);
+	                        } else {
+	                            self.emit("error", new Error("Unexpected Error: column header mismatch expected: " + headersLength + " columns got: " + data.length));
+	                            return orig(null, cb);
+	                        }
+	                    } else if (strictColumnHandling && (data.length < headersLength)) {
+	                        self.emit("data-invalid", data);
+	                        return orig(null, cb);
+	                    }
+	                    while (++i < headersLength) {
+	                        if (isUndefined(headers[i])) {
+	                            continue;
+	                        }
+	                        val = data[i];
+	                        ret[headers[i]] = isUndefined(val) ? '' : val;
+	                    }
+
+	                    return orig(ret, cb);
+	                };
+	            }
+	            self._parsedHeaders = true;
+	            cb(null);
+	        }
+
+	        if (renameHeaders) {
+	            if (Array.isArray(headers)) {
+	                rows.shift();
+	                headerHandler(null, headers);
+	            } else {
+	                self.emit("error", new Error("Error renaming headers: new headers must be provided in an array"));
+	            }
+	        } else if (extended.isBoolean(headers) && headers) {
+	            this.__handleLine(rows.shift(), 0, true, headerHandler);
+	        } else {
+	            headerHandler(null, headers);
+	        }
+
+	    },
+
+	    _parse: function _parseLine(data, hasMoreData, cb) {
+	        var rows, self = this;
+	        try {
+	            data = this.parser(data, hasMoreData);
+	            rows = data.rows;
+	            if (rows.length) {
+	                if (!this._parsedHeaders) {
+	                    this.__processHeaders(rows, function (err) {
+	                        if (err) {
+	                            cb(err);
+	                        } else {
+	                            self.__processRows(rows, data, cb);
+	                        }
+	                    });
+	                } else {
+	                    this.__processRows(rows, data, cb);
+	                }
+	            } else {
+	                cb(null, data.line);
+	            }
+	        } catch (e) {
+	            cb(e);
+	        }
+	    },
+
+	    __emitRecord: function (dataRow, count) {
+	        if (this._emitData) {
+	            this.push(this.__objectMode ? dataRow : JSON.stringify(dataRow));
+	        }
+	    },
+
+	    __removeBOM: function (data) {
+	        // Catches EFBBBF (UTF-8 BOM) because the buffer-to-string
+	        // conversion translates it to FEFF (UTF-16 BOM)
+	        if (data && typeof data == 'string' && data.charCodeAt(0) == '0xFEFF') {
+	            return data.slice(1);
+	        }
+	        return data;
+	    },
+
+	    _transform: function (data, encoding, done) {
+	        var lines = this.lines,
+	            lineData = (lines + this.decoder.write(data)),
+	            self = this;
+	        if (lineData.length > 1) {
+	            lineData = this.__removeBOM(lineData);
+	            this._parse(lineData, true, function (err, lineData) {
+	                if (err) {
+	                    done(err);
+	                } else {
+	                    self.lines = lineData;
+	                    if (!self.isStreamPaused()) {
+	                        done();
+	                    } else {
+	                        self.__pausedDone = done;
+	                    }
+	                }
+	            });
+	        } else {
+	            this.lines = lineData;
+	            if (!this.isStreamPaused()) {
+	                done();
+	            } else {
+	                this.__pausedDone = done;
+	            }
+	        }
+
+	    },
+
+	    __doFlush: function (callback) {
+	        try {
+	            callback();
+	        } catch (e) {
+	            callback(e);
+	        }
+	    },
+
+	    _flush: function (callback) {
+	        var self = this;
+	        if (this.lines) {
+	            this._parse(this.lines, false, function (err) {
+	                if (err) {
+	                    callback(err);
+	                } else if (!self.isStreamPaused()) {
+	                    self.__doFlush(callback);
+	                } else {
+	                    self.__pausedDone = function () {
+	                        self.__doFlush(callback);
+	                    };
+	                }
+	            });
+	        } else {
+	            if (!this.isStreamPaused()) {
+	                this.__doFlush(callback);
+	            } else {
+	                this.__pausedDone = function () {
+	                    self.__doFlush(callback);
+	                };
+	            }
+	        }
+	    },
+
+	    __validate: function (data, next) {
+	        return next(null, true);
+	    },
+
+	    __transform: function (data, next) {
+	        return next(null, data);
+	    },
+
+	    __flushPausedBuffer: function () {
+	        var buffered = this.__buffered, l = buffered.length;
+	        if (l) {
+	            var entry;
+	            while (buffered.length) {
+	                entry = buffered.shift();
+	                this.__emitRecord(entry[0], entry[1]);
+	                //handle case where paused is called while emitting data
+	                if (this.isStreamPaused()) {
+	                    return;
+	                }
+	            }
+	            buffered.length = 0;
+	        }
+	        if (this.__pausedDone) {
+	            var done = this.__pausedDone;
+	            this.__pausedDone = null;
+	            done();
+	        }
+	    },
+
+	    isStreamPaused: function () {
+	        return this.__paused;
+	    },
+
+	    emit: function (event) {
+	        if (event === "end") {
+	            if (!this.__endEmitted) {
+	                this.__endEmitted = true;
+	                spreadArgs(origEmit, ["end", ++this._rowCount], this);
+	            }
+	        } else {
+	            if (!hasIsPaused) {
+	                if (event === "pause") {
+	                    this.__paused = true;
+	                } else if (event === "resume") {
+	                    this.__paused = false;
+	                    this.__flushPausedBuffer();
+	                }
+	            }
+	            spreadArgs(origEmit, arguments, this);
+	        }
+	    },
+
+	    on: function (evt) {
+	        if (evt === "data" || evt === "readable") {
+	            this._emitData = true;
+	        }
+	        spreadArgs(origOn, arguments, this);
+	        return this;
+	    },
+
+	    validate: function (cb) {
+	        if (!extended.isFunction(cb)) {
+	            this.emit("error", new TypeError("fast-csv.Parser#validate requires a function"));
+	        }
+	        if (cb.length === 2) {
+	            this.__validate = cb;
+	        } else {
+	            this.__validate = function (data, next) {
+	                return next(null, cb(data));
+	            };
+	        }
+	        return this;
+	    },
+	    transform: function (cb) {
+	        if (!extended.isFunction(cb)) {
+	            this.emit("error", new TypeError("fast-csv.Parser#transform requires a function"));
+	        }
+	        if (cb.length === 2) {
+	            this.__transform = cb;
+	        } else {
+	            this.__transform = function (data, next) {
+	                return next(null, cb(data));
+	            };
+	        }
+	        return this;
+	    }
+
+	});
+
+	module.exports = ParserStream;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(6)))
+
+/***/ },
+/* 62 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(global, process) {// Copyright Joyent, Inc. and other Node contributors.
+	//
+	// Permission is hereby granted, free of charge, to any person obtaining a
+	// copy of this software and associated documentation files (the
+	// "Software"), to deal in the Software without restriction, including
+	// without limitation the rights to use, copy, modify, merge, publish,
+	// distribute, sublicense, and/or sell copies of the Software, and to permit
+	// persons to whom the Software is furnished to do so, subject to the
+	// following conditions:
+	//
+	// The above copyright notice and this permission notice shall be included
+	// in all copies or substantial portions of the Software.
+	//
+	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+	var formatRegExp = /%[sdj%]/g;
+	exports.format = function(f) {
+	  if (!isString(f)) {
+	    var objects = [];
+	    for (var i = 0; i < arguments.length; i++) {
+	      objects.push(inspect(arguments[i]));
+	    }
+	    return objects.join(' ');
+	  }
+
+	  var i = 1;
+	  var args = arguments;
+	  var len = args.length;
+	  var str = String(f).replace(formatRegExp, function(x) {
+	    if (x === '%%') return '%';
+	    if (i >= len) return x;
+	    switch (x) {
+	      case '%s': return String(args[i++]);
+	      case '%d': return Number(args[i++]);
+	      case '%j':
+	        try {
+	          return JSON.stringify(args[i++]);
+	        } catch (_) {
+	          return '[Circular]';
+	        }
+	      default:
+	        return x;
+	    }
+	  });
+	  for (var x = args[i]; i < len; x = args[++i]) {
+	    if (isNull(x) || !isObject(x)) {
+	      str += ' ' + x;
+	    } else {
+	      str += ' ' + inspect(x);
+	    }
+	  }
+	  return str;
+	};
+
+
+	// Mark that a method should not be used.
+	// Returns a modified function which warns once by default.
+	// If --no-deprecation is set, then it is a no-op.
+	exports.deprecate = function(fn, msg) {
+	  // Allow for deprecating things in the process of starting up.
+	  if (isUndefined(global.process)) {
+	    return function() {
+	      return exports.deprecate(fn, msg).apply(this, arguments);
+	    };
+	  }
+
+	  if (process.noDeprecation === true) {
+	    return fn;
+	  }
+
+	  var warned = false;
+	  function deprecated() {
+	    if (!warned) {
+	      if (process.throwDeprecation) {
+	        throw new Error(msg);
+	      } else if (process.traceDeprecation) {
+	        console.trace(msg);
+	      } else {
+	        console.error(msg);
+	      }
+	      warned = true;
+	    }
+	    return fn.apply(this, arguments);
+	  }
+
+	  return deprecated;
+	};
+
+
+	var debugs = {};
+	var debugEnviron;
+	exports.debuglog = function(set) {
+	  if (isUndefined(debugEnviron))
+	    debugEnviron = process.env.NODE_DEBUG || '';
+	  set = set.toUpperCase();
+	  if (!debugs[set]) {
+	    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
+	      var pid = process.pid;
+	      debugs[set] = function() {
+	        var msg = exports.format.apply(exports, arguments);
+	        console.error('%s %d: %s', set, pid, msg);
+	      };
+	    } else {
+	      debugs[set] = function() {};
+	    }
+	  }
+	  return debugs[set];
+	};
+
+
+	/**
+	 * Echos the value of a value. Trys to print the value out
+	 * in the best way possible given the different types.
+	 *
+	 * @param {Object} obj The object to print out.
+	 * @param {Object} opts Optional options object that alters the output.
+	 */
+	/* legacy: obj, showHidden, depth, colors*/
+	function inspect(obj, opts) {
+	  // default options
+	  var ctx = {
+	    seen: [],
+	    stylize: stylizeNoColor
+	  };
+	  // legacy...
+	  if (arguments.length >= 3) ctx.depth = arguments[2];
+	  if (arguments.length >= 4) ctx.colors = arguments[3];
+	  if (isBoolean(opts)) {
+	    // legacy...
+	    ctx.showHidden = opts;
+	  } else if (opts) {
+	    // got an "options" object
+	    exports._extend(ctx, opts);
+	  }
+	  // set default options
+	  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
+	  if (isUndefined(ctx.depth)) ctx.depth = 2;
+	  if (isUndefined(ctx.colors)) ctx.colors = false;
+	  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
+	  if (ctx.colors) ctx.stylize = stylizeWithColor;
+	  return formatValue(ctx, obj, ctx.depth);
+	}
+	exports.inspect = inspect;
+
+
+	// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
+	inspect.colors = {
+	  'bold' : [1, 22],
+	  'italic' : [3, 23],
+	  'underline' : [4, 24],
+	  'inverse' : [7, 27],
+	  'white' : [37, 39],
+	  'grey' : [90, 39],
+	  'black' : [30, 39],
+	  'blue' : [34, 39],
+	  'cyan' : [36, 39],
+	  'green' : [32, 39],
+	  'magenta' : [35, 39],
+	  'red' : [31, 39],
+	  'yellow' : [33, 39]
+	};
+
+	// Don't use 'blue' not visible on cmd.exe
+	inspect.styles = {
+	  'special': 'cyan',
+	  'number': 'yellow',
+	  'boolean': 'yellow',
+	  'undefined': 'grey',
+	  'null': 'bold',
+	  'string': 'green',
+	  'date': 'magenta',
+	  // "name": intentionally not styling
+	  'regexp': 'red'
+	};
+
+
+	function stylizeWithColor(str, styleType) {
+	  var style = inspect.styles[styleType];
+
+	  if (style) {
+	    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
+	           '\u001b[' + inspect.colors[style][1] + 'm';
+	  } else {
+	    return str;
+	  }
+	}
+
+
+	function stylizeNoColor(str, styleType) {
+	  return str;
+	}
+
+
+	function arrayToHash(array) {
+	  var hash = {};
+
+	  array.forEach(function(val, idx) {
+	    hash[val] = true;
+	  });
+
+	  return hash;
+	}
+
+
+	function formatValue(ctx, value, recurseTimes) {
+	  // Provide a hook for user-specified inspect functions.
+	  // Check that value is an object with an inspect function on it
+	  if (ctx.customInspect &&
+	      value &&
+	      isFunction(value.inspect) &&
+	      // Filter out the util module, it's inspect function is special
+	      value.inspect !== exports.inspect &&
+	      // Also filter out any prototype objects using the circular check.
+	      !(value.constructor && value.constructor.prototype === value)) {
+	    var ret = value.inspect(recurseTimes, ctx);
+	    if (!isString(ret)) {
+	      ret = formatValue(ctx, ret, recurseTimes);
+	    }
+	    return ret;
+	  }
+
+	  // Primitive types cannot have properties
+	  var primitive = formatPrimitive(ctx, value);
+	  if (primitive) {
+	    return primitive;
+	  }
+
+	  // Look up the keys of the object.
+	  var keys = Object.keys(value);
+	  var visibleKeys = arrayToHash(keys);
+
+	  if (ctx.showHidden) {
+	    keys = Object.getOwnPropertyNames(value);
+	  }
+
+	  // IE doesn't make error fields non-enumerable
+	  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
+	  if (isError(value)
+	      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
+	    return formatError(value);
+	  }
+
+	  // Some type of object without properties can be shortcutted.
+	  if (keys.length === 0) {
+	    if (isFunction(value)) {
+	      var name = value.name ? ': ' + value.name : '';
+	      return ctx.stylize('[Function' + name + ']', 'special');
+	    }
+	    if (isRegExp(value)) {
+	      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+	    }
+	    if (isDate(value)) {
+	      return ctx.stylize(Date.prototype.toString.call(value), 'date');
+	    }
+	    if (isError(value)) {
+	      return formatError(value);
+	    }
+	  }
+
+	  var base = '', array = false, braces = ['{', '}'];
+
+	  // Make Array say that they are Array
+	  if (isArray(value)) {
+	    array = true;
+	    braces = ['[', ']'];
+	  }
+
+	  // Make functions say that they are functions
+	  if (isFunction(value)) {
+	    var n = value.name ? ': ' + value.name : '';
+	    base = ' [Function' + n + ']';
+	  }
+
+	  // Make RegExps say that they are RegExps
+	  if (isRegExp(value)) {
+	    base = ' ' + RegExp.prototype.toString.call(value);
+	  }
+
+	  // Make dates with properties first say the date
+	  if (isDate(value)) {
+	    base = ' ' + Date.prototype.toUTCString.call(value);
+	  }
+
+	  // Make error with message first say the error
+	  if (isError(value)) {
+	    base = ' ' + formatError(value);
+	  }
+
+	  if (keys.length === 0 && (!array || value.length == 0)) {
+	    return braces[0] + base + braces[1];
+	  }
+
+	  if (recurseTimes < 0) {
+	    if (isRegExp(value)) {
+	      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+	    } else {
+	      return ctx.stylize('[Object]', 'special');
+	    }
+	  }
+
+	  ctx.seen.push(value);
+
+	  var output;
+	  if (array) {
+	    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+	  } else {
+	    output = keys.map(function(key) {
+	      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
+	    });
+	  }
+
+	  ctx.seen.pop();
+
+	  return reduceToSingleString(output, base, braces);
+	}
+
+
+	function formatPrimitive(ctx, value) {
+	  if (isUndefined(value))
+	    return ctx.stylize('undefined', 'undefined');
+	  if (isString(value)) {
+	    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
+	                                             .replace(/'/g, "\\'")
+	                                             .replace(/\\"/g, '"') + '\'';
+	    return ctx.stylize(simple, 'string');
+	  }
+	  if (isNumber(value))
+	    return ctx.stylize('' + value, 'number');
+	  if (isBoolean(value))
+	    return ctx.stylize('' + value, 'boolean');
+	  // For some reason typeof null is "object", so special case here.
+	  if (isNull(value))
+	    return ctx.stylize('null', 'null');
+	}
+
+
+	function formatError(value) {
+	  return '[' + Error.prototype.toString.call(value) + ']';
+	}
+
+
+	function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
+	  var output = [];
+	  for (var i = 0, l = value.length; i < l; ++i) {
+	    if (hasOwnProperty(value, String(i))) {
+	      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+	          String(i), true));
+	    } else {
+	      output.push('');
+	    }
+	  }
+	  keys.forEach(function(key) {
+	    if (!key.match(/^\d+$/)) {
+	      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
+	          key, true));
+	    }
+	  });
+	  return output;
+	}
+
+
+	function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
+	  var name, str, desc;
+	  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+	  if (desc.get) {
+	    if (desc.set) {
+	      str = ctx.stylize('[Getter/Setter]', 'special');
+	    } else {
+	      str = ctx.stylize('[Getter]', 'special');
+	    }
+	  } else {
+	    if (desc.set) {
+	      str = ctx.stylize('[Setter]', 'special');
+	    }
+	  }
+	  if (!hasOwnProperty(visibleKeys, key)) {
+	    name = '[' + key + ']';
+	  }
+	  if (!str) {
+	    if (ctx.seen.indexOf(desc.value) < 0) {
+	      if (isNull(recurseTimes)) {
+	        str = formatValue(ctx, desc.value, null);
+	      } else {
+	        str = formatValue(ctx, desc.value, recurseTimes - 1);
+	      }
+	      if (str.indexOf('\n') > -1) {
+	        if (array) {
+	          str = str.split('\n').map(function(line) {
+	            return '  ' + line;
+	          }).join('\n').substr(2);
+	        } else {
+	          str = '\n' + str.split('\n').map(function(line) {
+	            return '   ' + line;
+	          }).join('\n');
+	        }
+	      }
+	    } else {
+	      str = ctx.stylize('[Circular]', 'special');
+	    }
+	  }
+	  if (isUndefined(name)) {
+	    if (array && key.match(/^\d+$/)) {
+	      return str;
+	    }
+	    name = JSON.stringify('' + key);
+	    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
+	      name = name.substr(1, name.length - 2);
+	      name = ctx.stylize(name, 'name');
+	    } else {
+	      name = name.replace(/'/g, "\\'")
+	                 .replace(/\\"/g, '"')
+	                 .replace(/(^"|"$)/g, "'");
+	      name = ctx.stylize(name, 'string');
+	    }
+	  }
+
+	  return name + ': ' + str;
+	}
+
+
+	function reduceToSingleString(output, base, braces) {
+	  var numLinesEst = 0;
+	  var length = output.reduce(function(prev, cur) {
+	    numLinesEst++;
+	    if (cur.indexOf('\n') >= 0) numLinesEst++;
+	    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+	  }, 0);
+
+	  if (length > 60) {
+	    return braces[0] +
+	           (base === '' ? '' : base + '\n ') +
+	           ' ' +
+	           output.join(',\n  ') +
+	           ' ' +
+	           braces[1];
+	  }
+
+	  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+	}
+
+
+	// NOTE: These type checking functions intentionally don't use `instanceof`
+	// because it is fragile and can be easily faked with `Object.create()`.
+	function isArray(ar) {
+	  return Array.isArray(ar);
+	}
+	exports.isArray = isArray;
+
+	function isBoolean(arg) {
+	  return typeof arg === 'boolean';
+	}
+	exports.isBoolean = isBoolean;
+
+	function isNull(arg) {
+	  return arg === null;
+	}
+	exports.isNull = isNull;
+
+	function isNullOrUndefined(arg) {
+	  return arg == null;
+	}
+	exports.isNullOrUndefined = isNullOrUndefined;
+
+	function isNumber(arg) {
+	  return typeof arg === 'number';
+	}
+	exports.isNumber = isNumber;
+
+	function isString(arg) {
+	  return typeof arg === 'string';
+	}
+	exports.isString = isString;
+
+	function isSymbol(arg) {
+	  return typeof arg === 'symbol';
+	}
+	exports.isSymbol = isSymbol;
+
+	function isUndefined(arg) {
+	  return arg === void 0;
+	}
+	exports.isUndefined = isUndefined;
+
+	function isRegExp(re) {
+	  return isObject(re) && objectToString(re) === '[object RegExp]';
+	}
+	exports.isRegExp = isRegExp;
+
+	function isObject(arg) {
+	  return typeof arg === 'object' && arg !== null;
+	}
+	exports.isObject = isObject;
+
+	function isDate(d) {
+	  return isObject(d) && objectToString(d) === '[object Date]';
+	}
+	exports.isDate = isDate;
+
+	function isError(e) {
+	  return isObject(e) &&
+	      (objectToString(e) === '[object Error]' || e instanceof Error);
+	}
+	exports.isError = isError;
+
+	function isFunction(arg) {
+	  return typeof arg === 'function';
+	}
+	exports.isFunction = isFunction;
+
+	function isPrimitive(arg) {
+	  return arg === null ||
+	         typeof arg === 'boolean' ||
+	         typeof arg === 'number' ||
+	         typeof arg === 'string' ||
+	         typeof arg === 'symbol' ||  // ES6 symbol
+	         typeof arg === 'undefined';
+	}
+	exports.isPrimitive = isPrimitive;
+
+	exports.isBuffer = __webpack_require__(63);
+
+	function objectToString(o) {
+	  return Object.prototype.toString.call(o);
+	}
+
+
+	function pad(n) {
+	  return n < 10 ? '0' + n.toString(10) : n.toString(10);
+	}
+
+
+	var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+	              'Oct', 'Nov', 'Dec'];
+
+	// 26 Feb 16:19:34
+	function timestamp() {
+	  var d = new Date();
+	  var time = [pad(d.getHours()),
+	              pad(d.getMinutes()),
+	              pad(d.getSeconds())].join(':');
+	  return [d.getDate(), months[d.getMonth()], time].join(' ');
+	}
+
+
+	// log is just a thin wrapper to console.log that prepends a timestamp
+	exports.log = function() {
+	  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+	};
+
+
+	/**
+	 * Inherit the prototype methods from one constructor into another.
+	 *
+	 * The Function.prototype.inherits from lang.js rewritten as a standalone
+	 * function (not on Function.prototype). NOTE: If this file is to be loaded
+	 * during bootstrapping this function needs to be rewritten using some native
+	 * functions as prototype setup using normal JavaScript does not work as
+	 * expected during bootstrapping (see mirror.js in r114903).
+	 *
+	 * @param {function} ctor Constructor function which needs to inherit the
+	 *     prototype.
+	 * @param {function} superCtor Constructor function to inherit prototype from.
+	 */
+	exports.inherits = __webpack_require__(64);
+
+	exports._extend = function(origin, add) {
+	  // Don't do anything if add isn't an object
+	  if (!add || !isObject(add)) return origin;
+
+	  var keys = Object.keys(add);
+	  var i = keys.length;
+	  while (i--) {
+	    origin[keys[i]] = add[keys[i]];
+	  }
+	  return origin;
+	};
+
+	function hasOwnProperty(obj, prop) {
+	  return Object.prototype.hasOwnProperty.call(obj, prop);
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }()), __webpack_require__(6)))
+
+/***/ },
+/* 63 */
+/***/ function(module, exports) {
+
+	module.exports = function isBuffer(arg) {
+	  return arg && typeof arg === 'object'
+	    && typeof arg.copy === 'function'
+	    && typeof arg.fill === 'function'
+	    && typeof arg.readUInt8 === 'function';
+	}
+
+/***/ },
+/* 64 */
+/***/ function(module, exports) {
+
+	if (typeof Object.create === 'function') {
+	  // implementation from standard node.js 'util' module
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    ctor.prototype = Object.create(superCtor.prototype, {
+	      constructor: {
+	        value: ctor,
+	        enumerable: false,
+	        writable: true,
+	        configurable: true
+	      }
+	    });
+	  };
+	} else {
+	  // old school shim for old browsers
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    var TempCtor = function () {}
+	    TempCtor.prototype = superCtor.prototype
+	    ctor.prototype = new TempCtor()
+	    ctor.prototype.constructor = ctor
+	  }
+	}
+
+
+/***/ },
+/* 65 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var extended = __webpack_require__(31),
+	    has = extended.has,
+	    isUndefinedOrNull = extended.isUndefinedOrNull,
+	    trim = extended.trim,
+	    trimLeft = extended.trimLeft,
+	    trimRight = extended.trimRight;
+
+	function createParser(options) {
+	    options = options || {};
+	    var delimiter = options.delimiter || ",",
+	        doLtrim = options.ltrim || false,
+	        doRtrim = options.rtrim || false,
+	        doTrim = options.trim || false,
+	        ESCAPE = has(options, "quote") ? options.quote : '"',
+	        VALUE_REGEXP = new RegExp("([^" + delimiter + "'\"\\s\\\\]*(?:\\s+[^" + delimiter + "'\"\\s\\\\]+)*)"),
+	        SEARCH_REGEXP = new RegExp("(?:\\n|\\r|" + delimiter + ")"),
+	        ESCAPE_CHAR = options.escape || '"',
+	        NEXT_TOKEN_REGEXP = new RegExp("([^\\s]|\\r\\n|\\n|\\r|" + delimiter + ")"),
+	        ROW_DELIMITER = /(\r\n|\n|\r)/,
+	        SPACE_CHAR_REGEX = new RegExp("(?!" + delimiter + ") "),
+	        COMMENT, hasComments;
+	    if (has(options, "comment")) {
+	        COMMENT = options.comment;
+	        hasComments = true;
+	    }
+
+	    function formatItem(item) {
+	        if (doTrim) {
+	            item = trim(item);
+	        } else if (doLtrim) {
+	            item = trimLeft(item);
+	        } else if (doRtrim) {
+	            item = trimRight(item);
+	        }
+	        return item;
+	    }
+
+	    function parseEscapedItem(str, items, cursor, hasMoreData) {
+	        var depth = 0, ret = [];
+	        var startPushing = false, token, i = 0, l = str.length, escapeIsEscape = ESCAPE_CHAR === ESCAPE;
+	        if (l) {
+	            while (cursor < l && (token = str.charAt(cursor))) {
+	                if (token === ESCAPE) {
+	                    if (!startPushing) {
+	                        depth++;
+	                        startPushing = true;
+	                    } else if (escapeIsEscape && str.charAt(cursor + 1) === ESCAPE) {
+	                        cursor++;
+	                        ret[i++] = token;
+	                    } else if (!escapeIsEscape && ret[i - 1] === ESCAPE_CHAR) {
+	                        ret[i - 1] = token;
+	                    } else {
+	                        if (!(--depth)) {
+	                            ++cursor;
+	                            break;
+	                        }
+	                    }
+	                } else {
+	                    ret[i++] = token;
+	                }
+	                ++cursor;
+	            }
+	        }
+	        ret = ret.join("");
+	        var next = getNextToken(str, cursor),
+	            nextToken = next.token;
+	        if (nextToken && nextToken.search(delimiter) === 0) {
+	            if (hasMoreData && (next.cursor + 1) >= l) {
+	                cursor = null;
+	            } else {
+	                cursor++;
+	            }
+	        } else if (depth && !nextToken) {
+	            if (hasMoreData) {
+	                cursor = null;
+	            } else {
+	                throw new Error("Parse Error: expected: '" + ESCAPE + "' got: '" + nextToken + "'. at '" + str.substr(cursor).replace(/[r\n]/g, "\\n" + "'"));
+	            }
+	        } else if ((!depth && nextToken && nextToken.search(SEARCH_REGEXP) === -1)) {
+	            throw new Error("Parse Error: expected: '" + ESCAPE + "' got: '" + nextToken + "'. at '" + str.substr(cursor, 10).replace(/[\r\n]/g, "\\n" + "'"));
+	        } else if (hasMoreData && (!nextToken || !ROW_DELIMITER.test(nextToken))) {
+	            cursor = null;
+	        }
+	        if (cursor !== null) {
+	            items.push(formatItem(ret));
+	        }
+	        return cursor;
+	    }
+
+	    function parseCommentLine(line, cursor, hasMoreData) {
+	        var nextIndex = line.substr(cursor).search(ROW_DELIMITER);
+	        if (nextIndex === -1) {
+	            if (hasMoreData) {
+	                nextIndex = null;
+	            } else {
+	                nextIndex = line.length + 1;
+	            }
+	        } else {
+	            nextIndex = (cursor + nextIndex) + 1; //go past the next line break
+	        }
+	        return nextIndex;
+	    }
+
+	    function parseItem(line, items, cursor, hasMoreData) {
+	        var searchStr = line.substr(cursor),
+	            nextIndex = searchStr.search(SEARCH_REGEXP);
+	        if (nextIndex === -1) {
+	            if (!VALUE_REGEXP.test(searchStr)) {
+	                throw new Error("Parse Error: delimiter '" + delimiter + "' not found at '" + searchStr.replace(/\n/g, "\\n" + "'"));
+	            } else {
+	                nextIndex = searchStr.length;
+	            }
+	        }
+	        var nextChar = searchStr.charAt(nextIndex);
+	        if (nextChar.search(delimiter) !== -1) {
+	            if (hasMoreData && (cursor + (nextIndex + 1) >= line.length)) {
+	                cursor = null;
+	            } else {
+	                items.push(formatItem(searchStr.substr(0, nextIndex)));
+	                cursor += nextIndex + 1;
+
+	                var cursorChar = line.charAt(cursor);
+	                // if ends with a delimiter, append an empty element, unless strict column handling
+	                if (!options.strictColumnHandling && (ROW_DELIMITER.test(cursorChar) || cursor >= line.length)) {
+	                    items.push('');
+	                }
+	                // if ends with empty space that is not a delimiter, append an empty space, unless strict column handling
+	                if (!options.strictColumnHandling && SPACE_CHAR_REGEX.test(cursorChar) && !hasMoreData) {
+	                    items.push(cursorChar);
+	                }
+	            }
+	        } else if (ROW_DELIMITER.test(nextChar)) {
+	            items.push(formatItem(searchStr.substr(0, nextIndex)));
+	            cursor += nextIndex;
+	        } else if (!hasMoreData) {
+	            items.push(formatItem(searchStr.substr(0, nextIndex)));
+	            cursor += nextIndex + 1;
+	        } else {
+	            cursor = null;
+	        }
+
+	        return cursor;
+	    }
+
+	    function getNextToken(line, cursor) {
+	        var token, tokenLen, nextIndex, subStr = line.substr(cursor);
+	        if ((nextIndex = subStr.search(NEXT_TOKEN_REGEXP)) !== -1) {
+	            tokenLen = subStr.match(NEXT_TOKEN_REGEXP)[1].length;
+	            token = line.substr(cursor + nextIndex, tokenLen);
+	            cursor += nextIndex + tokenLen - 1;
+	        }
+	        return {token: token, cursor: cursor};
+	    }
+
+	    return function parseLine(line, hasMoreData) {
+	        var i = 0, l = line.length, rows = [], items = [], token, nextToken, cursor, lastLineI = 0;
+	        while (i < l) {
+	            nextToken = getNextToken(line, i);
+	            token = nextToken.token;
+	            if (isUndefinedOrNull(token)) {
+	                i = lastLineI;
+	                cursor = null;
+	                break;
+	            } else if (ROW_DELIMITER.test(token)) {
+	                i = nextToken.cursor + 1;
+	                if (i < l) {
+	                    rows.push(items);
+	                    items = [];
+	                    lastLineI = i;
+	                } else {
+	                    // if ends with CR and there is more data, keep unparsed due to possible coming LF in CRLF
+	                    if (token === '\r' && hasMoreData) {
+	                        i = lastLineI;
+	                        cursor = null;
+	                    }
+	                    break;
+	                }
+	            } else if (hasComments && token === COMMENT) {
+	                cursor = parseCommentLine(line, i, hasMoreData);
+	                if (cursor === null) {
+	                    i = lastLineI;
+	                    break;
+	                } else if (cursor < l) {
+	                    lastLineI = i = cursor;
+	                } else {
+	                    i = cursor;
+	                    cursor = null;
+	                    break;
+	                }
+	            } else {
+	                if (token === ESCAPE) {
+	                    cursor = parseEscapedItem(line, items, nextToken.cursor, hasMoreData);
+	                } else {
+	                    cursor = parseItem(line, items, i, hasMoreData);
+	                }
+	                if (cursor === null) {
+	                    i = lastLineI;
+	                    break;
+	                } else {
+	                    i = cursor;
+	                }
+	            }
+
+	        }
+	        cursor !== null && rows.push(items);
+	        return {line: line.substr(i), rows: rows};
+	    };
+
+	}
+	module.exports = createParser;
+
+
+/***/ },
+/* 66 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var Buffer = __webpack_require__(67).Buffer;
+
+	var isEncoding = Buffer.isEncoding || function (encoding) {
+	  encoding = '' + encoding;
+	  switch (encoding && encoding.toLowerCase()) {
+	    case 'hex':case 'utf8':case 'utf-8':case 'ascii':case 'binary':case 'base64':case 'ucs2':case 'ucs-2':case 'utf16le':case 'utf-16le':case 'raw':
+	      return true;
+	    default:
+	      return false;
+	  }
+	};
+
+	function _normalizeEncoding(enc) {
+	  if (!enc) return 'utf8';
+	  var retried;
+	  while (true) {
+	    switch (enc) {
+	      case 'utf8':
+	      case 'utf-8':
+	        return 'utf8';
+	      case 'ucs2':
+	      case 'ucs-2':
+	      case 'utf16le':
+	      case 'utf-16le':
+	        return 'utf16le';
+	      case 'latin1':
+	      case 'binary':
+	        return 'latin1';
+	      case 'base64':
+	      case 'ascii':
+	      case 'hex':
+	        return enc;
+	      default:
+	        if (retried) return; // undefined
+	        enc = ('' + enc).toLowerCase();
+	        retried = true;
+	    }
+	  }
+	};
+
+	// Do not cache `Buffer.isEncoding` when checking encoding names as some
+	// modules monkey-patch it to support additional encodings
+	function normalizeEncoding(enc) {
+	  var nenc = _normalizeEncoding(enc);
+	  if (typeof nenc !== 'string' && (Buffer.isEncoding === isEncoding || !isEncoding(enc))) throw new Error('Unknown encoding: ' + enc);
+	  return nenc || enc;
+	}
+
+	// StringDecoder provides an interface for efficiently splitting a series of
+	// buffers into a series of JS strings without breaking apart multi-byte
+	// characters.
+	exports.StringDecoder = StringDecoder;
+	function StringDecoder(encoding) {
+	  this.encoding = normalizeEncoding(encoding);
+	  var nb;
+	  switch (this.encoding) {
+	    case 'utf16le':
+	      this.text = utf16Text;
+	      this.end = utf16End;
+	      nb = 4;
+	      break;
+	    case 'utf8':
+	      this.fillLast = utf8FillLast;
+	      nb = 4;
+	      break;
+	    case 'base64':
+	      this.text = base64Text;
+	      this.end = base64End;
+	      nb = 3;
+	      break;
+	    default:
+	      this.write = simpleWrite;
+	      this.end = simpleEnd;
+	      return;
+	  }
+	  this.lastNeed = 0;
+	  this.lastTotal = 0;
+	  this.lastChar = Buffer.allocUnsafe(nb);
+	}
+
+	StringDecoder.prototype.write = function (buf) {
+	  if (buf.length === 0) return '';
+	  var r;
+	  var i;
+	  if (this.lastNeed) {
+	    r = this.fillLast(buf);
+	    if (r === undefined) return '';
+	    i = this.lastNeed;
+	    this.lastNeed = 0;
+	  } else {
+	    i = 0;
+	  }
+	  if (i < buf.length) return r ? r + this.text(buf, i) : this.text(buf, i);
+	  return r || '';
+	};
+
+	StringDecoder.prototype.end = utf8End;
+
+	// Returns only complete characters in a Buffer
+	StringDecoder.prototype.text = utf8Text;
+
+	// Attempts to complete a partial non-UTF-8 character using bytes from a Buffer
+	StringDecoder.prototype.fillLast = function (buf) {
+	  if (this.lastNeed <= buf.length) {
+	    buf.copy(this.lastChar, this.lastTotal - this.lastNeed, 0, this.lastNeed);
+	    return this.lastChar.toString(this.encoding, 0, this.lastTotal);
+	  }
+	  buf.copy(this.lastChar, this.lastTotal - this.lastNeed, 0, buf.length);
+	  this.lastNeed -= buf.length;
+	};
+
+	// Checks the type of a UTF-8 byte, whether it's ASCII, a leading byte, or a
+	// continuation byte.
+	function utf8CheckByte(byte) {
+	  if (byte <= 0x7F) return 0;else if (byte >> 5 === 0x06) return 2;else if (byte >> 4 === 0x0E) return 3;else if (byte >> 3 === 0x1E) return 4;
+	  return -1;
+	}
+
+	// Checks at most 3 bytes at the end of a Buffer in order to detect an
+	// incomplete multi-byte UTF-8 character. The total number of bytes (2, 3, or 4)
+	// needed to complete the UTF-8 character (if applicable) are returned.
+	function utf8CheckIncomplete(self, buf, i) {
+	  var j = buf.length - 1;
+	  if (j < i) return 0;
+	  var nb = utf8CheckByte(buf[j]);
+	  if (nb >= 0) {
+	    if (nb > 0) self.lastNeed = nb - 1;
+	    return nb;
+	  }
+	  if (--j < i) return 0;
+	  nb = utf8CheckByte(buf[j]);
+	  if (nb >= 0) {
+	    if (nb > 0) self.lastNeed = nb - 2;
+	    return nb;
+	  }
+	  if (--j < i) return 0;
+	  nb = utf8CheckByte(buf[j]);
+	  if (nb >= 0) {
+	    if (nb > 0) {
+	      if (nb === 2) nb = 0;else self.lastNeed = nb - 3;
+	    }
+	    return nb;
+	  }
+	  return 0;
+	}
+
+	// Validates as many continuation bytes for a multi-byte UTF-8 character as
+	// needed or are available. If we see a non-continuation byte where we expect
+	// one, we "replace" the validated continuation bytes we've seen so far with
+	// UTF-8 replacement characters ('\ufffd'), to match v8's UTF-8 decoding
+	// behavior. The continuation byte check is included three times in the case
+	// where all of the continuation bytes for a character exist in the same buffer.
+	// It is also done this way as a slight performance increase instead of using a
+	// loop.
+	function utf8CheckExtraBytes(self, buf, p) {
+	  if ((buf[0] & 0xC0) !== 0x80) {
+	    self.lastNeed = 0;
+	    return '\ufffd'.repeat(p);
+	  }
+	  if (self.lastNeed > 1 && buf.length > 1) {
+	    if ((buf[1] & 0xC0) !== 0x80) {
+	      self.lastNeed = 1;
+	      return '\ufffd'.repeat(p + 1);
+	    }
+	    if (self.lastNeed > 2 && buf.length > 2) {
+	      if ((buf[2] & 0xC0) !== 0x80) {
+	        self.lastNeed = 2;
+	        return '\ufffd'.repeat(p + 2);
+	      }
+	    }
+	  }
+	}
+
+	// Attempts to complete a multi-byte UTF-8 character using bytes from a Buffer.
+	function utf8FillLast(buf) {
+	  var p = this.lastTotal - this.lastNeed;
+	  var r = utf8CheckExtraBytes(this, buf, p);
+	  if (r !== undefined) return r;
+	  if (this.lastNeed <= buf.length) {
+	    buf.copy(this.lastChar, p, 0, this.lastNeed);
+	    return this.lastChar.toString(this.encoding, 0, this.lastTotal);
+	  }
+	  buf.copy(this.lastChar, p, 0, buf.length);
+	  this.lastNeed -= buf.length;
+	}
+
+	// Returns all complete UTF-8 characters in a Buffer. If the Buffer ended on a
+	// partial character, the character's bytes are buffered until the required
+	// number of bytes are available.
+	function utf8Text(buf, i) {
+	  var total = utf8CheckIncomplete(this, buf, i);
+	  if (!this.lastNeed) return buf.toString('utf8', i);
+	  this.lastTotal = total;
+	  var end = buf.length - (total - this.lastNeed);
+	  buf.copy(this.lastChar, 0, end);
+	  return buf.toString('utf8', i, end);
+	}
+
+	// For UTF-8, a replacement character for each buffered byte of a (partial)
+	// character needs to be added to the output.
+	function utf8End(buf) {
+	  var r = buf && buf.length ? this.write(buf) : '';
+	  if (this.lastNeed) return r + '\ufffd'.repeat(this.lastTotal - this.lastNeed);
+	  return r;
+	}
+
+	// UTF-16LE typically needs two bytes per character, but even if we have an even
+	// number of bytes available, we need to check if we end on a leading/high
+	// surrogate. In that case, we need to wait for the next two bytes in order to
+	// decode the last character properly.
+	function utf16Text(buf, i) {
+	  if ((buf.length - i) % 2 === 0) {
+	    var r = buf.toString('utf16le', i);
+	    if (r) {
+	      var c = r.charCodeAt(r.length - 1);
+	      if (c >= 0xD800 && c <= 0xDBFF) {
+	        this.lastNeed = 2;
+	        this.lastTotal = 4;
+	        this.lastChar[0] = buf[buf.length - 2];
+	        this.lastChar[1] = buf[buf.length - 1];
+	        return r.slice(0, -1);
+	      }
+	    }
+	    return r;
+	  }
+	  this.lastNeed = 1;
+	  this.lastTotal = 2;
+	  this.lastChar[0] = buf[buf.length - 1];
+	  return buf.toString('utf16le', i, buf.length - 1);
+	}
+
+	// For UTF-16LE we do not explicitly append special replacement characters if we
+	// end on a partial character, we simply let v8 handle that.
+	function utf16End(buf) {
+	  var r = buf && buf.length ? this.write(buf) : '';
+	  if (this.lastNeed) {
+	    var end = this.lastTotal - this.lastNeed;
+	    return r + this.lastChar.toString('utf16le', 0, end);
+	  }
+	  return r;
+	}
+
+	function base64Text(buf, i) {
+	  var n = (buf.length - i) % 3;
+	  if (n === 0) return buf.toString('base64', i);
+	  this.lastNeed = 3 - n;
+	  this.lastTotal = 3;
+	  if (n === 1) {
+	    this.lastChar[0] = buf[buf.length - 1];
+	  } else {
+	    this.lastChar[0] = buf[buf.length - 2];
+	    this.lastChar[1] = buf[buf.length - 1];
+	  }
+	  return buf.toString('base64', i, buf.length - n);
+	}
+
+	function base64End(buf) {
+	  var r = buf && buf.length ? this.write(buf) : '';
+	  if (this.lastNeed) return r + this.lastChar.toString('base64', 0, 3 - this.lastNeed);
+	  return r;
+	}
+
+	// Pass bytes on through for single-byte encodings (e.g. ascii, latin1, hex)
+	function simpleWrite(buf) {
+	  return buf.toString(this.encoding);
+	}
+
+	function simpleEnd(buf) {
+	  return buf && buf.length ? this.write(buf) : '';
+	}
+
+/***/ },
+/* 67 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* eslint-disable node/no-deprecated-api */
+	var buffer = __webpack_require__(8)
+	var Buffer = buffer.Buffer
+
+	// alternative to using Object.keys for old browsers
+	function copyProps (src, dst) {
+	  for (var key in src) {
+	    dst[key] = src[key]
+	  }
+	}
+	if (Buffer.from && Buffer.alloc && Buffer.allocUnsafe && Buffer.allocUnsafeSlow) {
+	  module.exports = buffer
+	} else {
+	  // Copy properties from require('buffer')
+	  copyProps(buffer, exports)
+	  exports.Buffer = SafeBuffer
+	}
+
+	function SafeBuffer (arg, encodingOrOffset, length) {
+	  return Buffer(arg, encodingOrOffset, length)
+	}
+
+	// Copy static methods from Buffer
+	copyProps(Buffer, SafeBuffer)
+
+	SafeBuffer.from = function (arg, encodingOrOffset, length) {
+	  if (typeof arg === 'number') {
+	    throw new TypeError('Argument must not be a number')
+	  }
+	  return Buffer(arg, encodingOrOffset, length)
+	}
+
+	SafeBuffer.alloc = function (size, fill, encoding) {
+	  if (typeof size !== 'number') {
+	    throw new TypeError('Argument must be a number')
+	  }
+	  var buf = Buffer(size)
+	  if (fill !== undefined) {
+	    if (typeof encoding === 'string') {
+	      buf.fill(fill, encoding)
+	    } else {
+	      buf.fill(fill)
+	    }
+	  } else {
+	    buf.fill(0)
+	  }
+	  return buf
+	}
+
+	SafeBuffer.allocUnsafe = function (size) {
+	  if (typeof size !== 'number') {
+	    throw new TypeError('Argument must be a number')
+	  }
+	  return Buffer(size)
+	}
+
+	SafeBuffer.allocUnsafeSlow = function (size) {
+	  if (typeof size !== 'number') {
+	    throw new TypeError('Argument must be a number')
+	  }
+	  return buffer.SlowBuffer(size)
+	}
+
+
+/***/ },
+/* 68 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(Buffer) {var fs = __webpack_require__(12),
+	    extended = __webpack_require__(31),
+	    escape = extended.escape,
+	    stream = __webpack_require__(44),
+	    LINE_BREAK = extended.LINE_BREAK,
+	    CsvTransformStream = __webpack_require__(69);
+
+
+	function createWriteStream(options) {
+	    return new CsvTransformStream(options);
+	}
+
+	function write(arr, options, ws) {
+	    var csvStream = createWriteStream(options), i = -1, l = arr.length;
+	    extended.asyncEach(arr, function (item, cb) {
+	        csvStream.write(item, null, cb);
+	    }, function (err) {
+	        if (err) {
+	            csvStream.emit("error", err);
+	        } else {
+	            csvStream.end();
+	        }
+	    });
+	    return csvStream;
+	}
+
+	function writeToStream(ws, arr, options) {
+	    return write(arr, options).pipe(ws);
+	}
+
+	function writeToString(arr, options, cb) {
+	    if (extended.isFunction(options)) {
+	        cb = options;
+	        options = {};
+	    }
+	    var ws = new stream.Writable(), written = [];
+	    ws._write = function (data, enc, cb) {
+	        written.push(data + "");
+	        cb();
+	    };
+	    ws
+	        .on("error", cb)
+	        .on("finish", function () {
+	            cb(null, written.join(""));
+	        });
+	    write(arr, options).pipe(ws);
+	}
+
+
+	function writeToBuffer(arr, options, cb) {
+	    if (extended.isFunction(options)) {
+	        cb = options;
+	        options = {};
+	    }
+	    var ws = new stream.Writable(), buffers = [], l = 0;
+	    ws._write = function (data, enc, cb) {
+	        buffers.push(data);
+	        l++;
+	        cb();
+	    };
+	    ws
+	        .on("error", cb)
+	        .on("finish", function () {
+	            cb(null, Buffer.concat(buffers));
+	        });
+	    write(arr, options).pipe(ws);
+	}
+
+	function writeToPath(path, arr, options) {
+	    var stream = fs.createWriteStream(path, {encoding: "utf8"});
+	    return write(arr, options).pipe(stream);
+	}
+
+	createWriteStream.writeToBuffer = writeToBuffer;
+	createWriteStream.write = write;
+	createWriteStream.createWriteStream = createWriteStream;
+	createWriteStream.writeToString = writeToString;
+	createWriteStream.writeToPath = writeToPath;
+	createWriteStream.writeToStream = writeToStream;
+	module.exports = createWriteStream;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
+
+/***/ },
+/* 69 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(Buffer) {var fs = __webpack_require__(12),
+	    util = __webpack_require__(62),
+	    extended = __webpack_require__(31),
+	    escape = extended.escape,
+	    isArray = extended.isArray,
+	    has = extended.has,
+	    stream = __webpack_require__(44),
+	    Transform = stream.Transform,
+	    LINE_BREAK = extended.LINE_BREAK,
+	    formatter = __webpack_require__(70),
+	    createFormatter = formatter.createFormatter,
+	    checkHeaders = formatter.checkHeaders,
+	    transformItem = formatter.transformItem,
+	    defaultTransform = formatter.defaultTransform;
+
+	function CsvTransformStream(options) {
+	    options = options || {};
+	    options.objectMode = true;
+
+	    if (has(options, "transform")) {
+	        // remove so its not set to _transform in Transform constructor
+	        options.consumerTransform = options.transform;
+	        delete options.transform;
+	    }
+
+	    Transform.call(this, options);
+	    this.formatter = createFormatter(options, this);
+	    this.rowDelimiter = options.rowDelimiter || "\n";
+	    var hasHeaders = has(options, "headers") ? !!options.headers : null,
+	        headers = (hasHeaders && isArray(options.headers)) ? options.headers : null;
+	    this.hasHeaders = hasHeaders;
+	    this.headers = headers;
+	    if (hasHeaders) {
+	        if (headers) {
+	            this.parsedHeaders = true;
+	            this.headersLength = headers.length;
+	        } else {
+	            this.parsedHeaders = false;
+	        }
+	    }
+	    this.hasWrittenHeaders = hasHeaders ? false : true;
+	    this.includeEndRowDelimiter = !!options.includeEndRowDelimiter,
+	    has(options, "consumerTransform") && this.transform(options.consumerTransform);
+	}
+	util.inherits(CsvTransformStream, Transform);
+
+	extended(CsvTransformStream).extend({
+
+	    headers: null,
+
+	    headersLength: 0,
+
+	    totalCount: 0,
+
+	    _transform: function (item, encoding, cb) {
+	        var self = this;
+	        this.__transform(item, function (err, item) {
+	            if (err) {
+	                cb(err);
+	            } else {
+	                if (checkHeaders(self, item)) {
+	                    self.push(new Buffer(transformItem(self, item), "utf8"));
+	                }
+	                cb();
+	            }
+	        });
+	    },
+
+	    __transform: defaultTransform,
+
+	    transform: function (cb) {
+	        if (!extended.isFunction(cb)) {
+	            this.emit("error", new TypeError("fast-csv.FormatterStream#transform requires a function"));
+	        }
+	        if (cb.length === 2) {
+	            this.__transform = cb;
+	        } else {
+	            this.__transform = function (data, next) {
+	                next(null, cb(data));
+	            };
+	        }
+	        return this;
+	    },
+
+	    _flush: function (cb) {
+	        if (this.includeEndRowDelimiter) {
+	            this.push(this.rowDelimiter);
+	        }
+	        cb();
+	    }
+	});
+
+	module.exports = CsvTransformStream;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
+
+/***/ },
+/* 70 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(Buffer) {var fs = __webpack_require__(12),
+	    extended = __webpack_require__(31),
+	    has = extended.has,
+	    isBoolean = extended.isBoolean,
+	    isUndefinedOrNull = extended.isUndefinedOrNull,
+	    escape = extended.escape,
+	    isArray = extended.isArray,
+	    keys = extended.keys,
+	    stream = __webpack_require__(44),
+	    LINE_BREAK = extended.LINE_BREAK;
+
+	function createQuoteChecker(stream, quoteColumns, quoteHeaders) {
+	    var shouldQuote;
+	    if (isBoolean(quoteColumns)) {
+	        if (isBoolean(quoteHeaders)) {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return (isHeader ? quoteHeaders : quoteColumns);
+	            };
+	        } else if (isArray(quoteHeaders)) {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders[index] : quoteColumns;
+	            };
+	        } else {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders[stream.headers[index]] : quoteColumns;
+	            };
+	        }
+	    } else if (isArray(quoteColumns)) {
+	        if (isBoolean(quoteHeaders)) {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders : quoteColumns[index];
+	            };
+	        } else {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders[index] : quoteColumns[index];
+	            };
+	        }
+	    } else {
+	        if (isBoolean(quoteHeaders)) {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders : quoteColumns[stream.headers[index]];
+	            };
+	        } else {
+	            shouldQuote = function shouldQuote(index, isHeader) {
+	                return isHeader ? quoteHeaders[stream.headers[index]] : quoteColumns[stream.headers[index]];
+	            };
+	        }
+	    }
+	    return shouldQuote;
+	}
+
+	function createFormatter(options, stream) {
+	    options = options || {};
+	    var delimiter = options.delimiter || ",",
+	        ESCAPE_REGEXP = new RegExp("[" + delimiter + escape(options.rowDelimiter || LINE_BREAK) + "']"),
+	        QUOTE = options.quote || '"',
+	        ESCAPE = options.escape || '"',
+	        REPLACE_REGEXP = new RegExp(QUOTE, "g"),
+	        quoteColumns = has(options, "quoteColumns") ? options.quoteColumns : false,
+	        quoteHeaders = has(options, "quoteHeaders") ? options.quoteHeaders : quoteColumns,
+	        shouldQuote = createQuoteChecker(stream, quoteColumns, quoteHeaders);
+
+
+	    function escapeField(field, index, isHeader) {
+	        var escape;
+	        field = field.replace(/\0/g, '');
+	        if ((escape = field.indexOf(QUOTE) !== -1)) {
+	            field = field.replace(REPLACE_REGEXP, ESCAPE + QUOTE);
+	            escape = true;
+	        } else {
+	            escape = field.search(ESCAPE_REGEXP) !== -1;
+	        }
+	        escape = escape || shouldQuote(index, isHeader);
+	        if (escape) {
+	            field = [QUOTE + field + QUOTE];
+	        } else {
+	            field = [field];
+	        }
+	        return field.join("");
+	    }
+
+	    return function escapeFields(fields, isHeader) {
+	        var i = -1, l = fields.length, ret = [], field;
+	        while (++i < l) {
+	            field = fields[i];
+	            field = (isUndefinedOrNull(field) ? "" : field) + "";
+	            ret.push(escapeField(field, i, isHeader));
+	        }
+	        return ret.join(delimiter);
+	    };
+	}
+
+	function defaultTransform(row, cb) {
+	    return cb(null, row);
+	}
+
+
+	function isHashArray(arr) {
+	    return isArray(arr) && isArray(arr[0]) && arr[0].length === 2;
+	}
+
+	//get headers from a row item
+	function gatherHeaders(item) {
+	    var ret, i, l;
+	    if (isHashArray(item)) {
+	        //lets assume a multidimesional array with item 0 bing the title
+	        i = -1;
+	        l = item.length;
+	        ret = [];
+	        while (++i < l) {
+	            ret[i] = item[i][0];
+	        }
+	    } else if (isArray(item)) {
+	        ret = item;
+	    } else {
+	        ret = keys(item);
+	    }
+	    return ret;
+	}
+
+	//check if we need to write header return true if we should also write a row
+	//could be false if headers is true and the header row(first item) is passed in
+	function checkHeaders(stream, item) {
+	    var headers, ret = true;
+	    if (!stream.parsedHeaders) {
+	        stream.parsedHeaders = true;
+	        headers = stream.headers = gatherHeaders(item);
+	        stream.headersLength = headers.length;
+	    }
+	    if (!stream.hasWrittenHeaders) {
+	        stream.totalCount++;
+	        stream.push(new Buffer(stream.formatter(stream.headers, true), "utf8"));
+	        stream.hasWrittenHeaders = true;
+	        ret = isHashArray(item) || !isArray(item);
+	    }
+	    return ret;
+	}
+
+	//transform an object into a CSV row
+	function transformHashData(stream, item) {
+	    var vals = [], row = [], headers = stream.headers, i = -1, headersLength = stream.headersLength;
+	    if (stream.totalCount++) {
+	        row.push(stream.rowDelimiter);
+	    }
+	    while (++i < headersLength) {
+	        vals[i] = item[headers[i]];
+	    }
+	    row.push(stream.formatter(vals));
+	    return row.join("");
+	}
+
+	//transform an array into a CSV row
+	function transformArrayData(stream, item, cb) {
+	    var row = [];
+	    if (stream.totalCount++) {
+	        row.push(stream.rowDelimiter);
+	    }
+	    row.push(stream.formatter(item));
+	    return row.join("");
+	}
+
+	//transform an array of two item arrays into a CSV row
+	function transformHashArrayData(stream, item) {
+	    var vals = [], row = [], i = -1, headersLength = stream.headersLength;
+	    if (stream.totalCount++) {
+	        row.push(stream.rowDelimiter);
+	    }
+	    while (++i < headersLength) {
+	        vals[i] = item[i][1];
+	    }
+	    row.push(stream.formatter(vals));
+	    return row.join("");
+	}
+
+	//wrapper to determin what transform to run
+	function transformItem(stream, item) {
+	    var ret;
+	    if (isArray(item)) {
+	        if (isHashArray(item)) {
+	            ret = transformHashArrayData(stream, item);
+	        } else {
+	            ret = transformArrayData(stream, item);
+	        }
+	    } else {
+	        ret = transformHashData(stream, item);
+	    }
+	    return ret;
+	}
+
+	exports.createFormatter = createFormatter;
+	exports.transformItem = transformItem;
+	exports.checkHeaders = checkHeaders;
+	exports.defaultTransform = defaultTransform;
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
 
 /***/ }
 /******/ ])

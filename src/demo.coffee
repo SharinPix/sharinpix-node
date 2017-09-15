@@ -6,5 +6,6 @@ $ ->
     window.sharinpix.configure($('#sharinpixurl').val())
     console.log $('#sharinpixurl').val()
     for file in this.files
-      window.sharinpix.upload(file, 'super_test', {externalId: 'just a test'}).then (image)->
-        console.log image
+      window.sharinpix.upload file, 'super_test', externalId: 'just a test'
+        .then (image)->
+          console.log image

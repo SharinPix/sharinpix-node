@@ -75,7 +75,7 @@ class Sharinpix
       .on 'data', (data)=>
         file_path = data[0] # Valid image path
         album_id = data[1]  # Valid Salesforce ID (18-character)
-        if (file_path != null && file_path != undefined && album_id != null && album_id != undefined)
+        if file_path && album_id
           uploads.push (callback)=>
             unless path.isAbsolute(file_path)
               file_path = path.join csv_path, "../#{file_path}"
