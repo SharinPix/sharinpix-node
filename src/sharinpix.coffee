@@ -70,8 +70,9 @@ class Sharinpix
     token
   multiupload: (csv_path, callback)->
     contentStream = fs.createReadStream(csv_path)
+    uploads = []
     csvStream = fastCsv()
-      .on 'data', (data)->
+      .on 'data', (data)=>
         file_path = data[0] # Valid image path
         album_id = data[1]  # Valid Salesforce ID (18-character)
         if (file_path != null && file_path != undefined && album_id != null && album_id != undefined)
@@ -83,7 +84,8 @@ class Sharinpix
                 callback(null, image)
               .catch (err)->
                 callback(err)
-    async.parallelLimit uploads, 2, callback
+      .on 'end', ->
+        async.parallelLimit uploads, 2, callback
     contentStream.pipe csvStream
 
 _options = undefined
