@@ -1,6 +1,9 @@
 jsrsasign = require 'jsrsasign'
 superagent = require 'superagent'
 url = require 'url'
+async = require 'async'
+JSZip = require 'jszip'
+FileSaver = require 'file-saver'
 
 class Sharinpix
   constructor: (@options)->
@@ -55,6 +58,101 @@ class Sharinpix
           claims
         ).then (res)->
           res
+  get_album_images: (album_id, page_done, all_done)->
+    claims = {
+      abilities: {
+        "#{album_id}": {
+          Access:
+            see: true,
+            image_list: true
+        }
+      }
+    }
+    all_images = []
+    load_page = (page)=>
+      @get("/albums/" + album_id + "/images?page=" + page, claims).then (page_images)->
+        if (page_images.length == 0)
+          all_done(all_images) if all_done?
+        else
+          all_images.push.apply(all_images, page_images)
+          page_done(page_images) if page_done?
+          load_page(page + 1)
+    load_page(1)
+  download_images: (image_urls, one_done, all_done)->
+    _download_image = (url, done)->
+      superagent
+        .get(url)
+        # .responseType('blob')
+        .end((err, res)->
+          if done?
+            done(res.body) unless err?
+        )
+
+    q = async.queue(
+      (task, one_done)->
+        _download_image(task, one_done)
+      ,3
+    )
+    q.drain = ->
+      console.log 'Download q drained.'
+      all_done() if all_done?
+
+    image_urls.forEach((image_url)->
+      q.push(image_url, one_done)
+    )
+  zip_files: (blobs, callback)->
+    console.log 'zip_files'
+    zip = new JSZip()
+    deferreds = []
+    blobs.forEach((blob)->
+      zip.file("name#{Math.random().toString(36).substr(2, 5)}.jpg", blob, { binary: true }) # set name
+    )
+    console.log 'zip =', zip
+    zip
+      .generateAsync({ type: "blob" })
+      .then((content)->
+        console.log 'zipped content', content
+        callback(content) if callback?
+      )
+
+
+  zip_album: (album_id, options, callback)->
+    return unless album_id?
+    options = {} unless options?
+    filename = (options.filename || 'Extract') + '.zip'
+    type = options.type || 'original' # USE FULL BY DEFAULT. original, full + add type: annotated but at original image size
+    _download_images = @download_images
+    _zip_files = @zip_files
+    @get_album_images(
+      album_id
+      ,null
+      ,(all_images)->
+        image_urls = []
+        all_images.forEach((image)->
+          image_urls.push image.original_url # type of download
+        )
+        console.log "all_images.length: #{all_images.length}"
+        all_blobs = []
+        _download_images(
+          image_urls
+          ,(body)->
+            console.log '1 file downloaded'
+            all_blobs.push(body)
+          ,->
+            console.log 'All files downloaded'
+            # unless callback?
+            #   callback = ->
+            #     try ->
+            #       fileSaverSupported = !!new Blob
+            #       if fileSaverSupported
+            #         FileSaver.saveAs(content, filename)
+            #       else
+            #         alert 'Download not supported on your browser.'
+            #     catch e
+            _zip_files(all_blobs, callback)
+        )
+    )
+
   token: (claims)->
     claims["iss"] = @options.id
     token = jsrsasign.jws.JWS.sign(
