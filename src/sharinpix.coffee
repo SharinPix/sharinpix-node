@@ -3,7 +3,7 @@ superagent = require 'superagent'
 url = require 'url'
 async = require 'async'
 JSZip = require 'jszip'
-save_file = require 'save-file'
+FileSaver = require 'file-saver'
 
 class Sharinpix
   constructor: (@options)->
@@ -71,20 +71,20 @@ class Sharinpix
     load_page = (page)=>
       @get("/albums/" + album_id + "/images?page=" + page, claims).then (page_images)->
         if (page_images.length == 0)
-          all_done(all_images)
+          all_done(all_images) if all_done?
         else
           all_images.push.apply(all_images, page_images)
-          page_done(page_images)
+          page_done(page_images) if page_done?
           load_page(page + 1)
     load_page(1)
   download_images: (image_urls, one_done, all_done)->
-    console.log 'download_images'
     _download_image = (url, done)->
       superagent
         .get(url)
         # .responseType('blob')
         .end((err, res)->
-          done(res.body) unless err?
+          if done?
+            done(res.body) unless err?
         )
 
     q = async.queue(
@@ -93,39 +93,29 @@ class Sharinpix
       ,3
     )
     q.drain = ->
-      console.log 'q drained'
-      all_done()
+      console.log 'Download q drained.'
+      all_done() if all_done?
 
     image_urls.forEach((image_url)->
       q.push(image_url, one_done)
     )
-  zip_files: (blobs)->
+  zip_files: (blobs, callback)->
     console.log 'zip_files'
     zip = new JSZip()
     deferreds = []
     blobs.forEach((blob)->
-      zip.file("name#{Math.random().toString(36).substr(2, 5)}.jpg", blob, { binary: true })
+      zip.file("name#{Math.random().toString(36).substr(2, 5)}.jpg", blob, { binary: true }) # set name
     )
-    # save_file(
-    #   blobs[0],
-    #   'image.jpg',
-    #   (err)=>
-    #     console.log 'File saved !'
-    # )
-    zip.generateAsync({ type: "blob" })
+    console.log 'zip =', zip
+    zip
+      .generateAsync({ type: "blob" })
       .then((content)->
-        console.log 'zipping content', content
-        save_file(
-          content,
-          'Extract.zip',
-          (err)->
-            console.log 'done?'
-
-        )
+        console.log 'zipped content', content
+        callback(content) if callback?
       )
 
 
-  zip_album: (album_id, options)->
+  zip_album: (album_id, options, callback)->
     return unless album_id?
     options = {} unless options?
     filename = (options.filename || 'Extract') + '.zip'
@@ -134,14 +124,13 @@ class Sharinpix
     _zip_files = @zip_files
     @get_album_images(
       album_id
-      ,(page_images)->
-        console.log "Page handling #{page_images.length}"
+      ,null
       ,(all_images)->
         image_urls = []
         all_images.forEach((image)->
-          image_urls.push image.original_url
+          image_urls.push image.original_url # type of download
         )
-        console.log "All handling #{all_images.length}"
+        console.log "all_images.length: #{all_images.length}"
         all_blobs = []
         _download_images(
           image_urls
@@ -150,7 +139,16 @@ class Sharinpix
             all_blobs.push(body)
           ,->
             console.log 'All files downloaded'
-            _zip_files(all_blobs)
+            # unless callback?
+            #   callback = ->
+            #     try ->
+            #       fileSaverSupported = !!new Blob
+            #       if fileSaverSupported
+            #         FileSaver.saveAs(content, filename)
+            #       else
+            #         alert 'Download not supported on your browser.'
+            #     catch e
+            _zip_files(all_blobs, callback)
         )
     )
 
