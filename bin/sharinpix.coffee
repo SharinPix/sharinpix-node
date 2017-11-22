@@ -7,6 +7,17 @@ module.exports = ->
     return
   action = process.argv[2]
   switch action
+    when 'import'
+      url = process.argv[3]
+      albumId = process.argv[4]
+      metadatas = process.argv[5] || '{}'
+      if url && albumId
+        Sharinpix.import(url, albumId, JSON.parse(metadatas)).then (image) ->
+          console.log image, 'SUCCESS'
+        , (error) ->
+          console.log error, 'ERROR'
+      else
+        console.log 'Wrong parameters'
     when 'upload'
       image = process.argv[3]
       albumId = process.argv[4]

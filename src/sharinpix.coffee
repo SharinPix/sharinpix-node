@@ -10,7 +10,7 @@ class Sharinpix
   constructor: (@options)->
   api_url: (path)->
     "#{@options.endpoint}#{path}"
-  post: (endpoint, body, claims)->
+  post: (endpoint, body, claims={admin: true})->
     superagent
       .post(@api_url(endpoint))
       .set('Authorization', "Token token=\"#{@token(claims)}\"")
@@ -25,6 +25,15 @@ class Sharinpix
       .set('Accept', 'application/json')
       .then (res)->
         res.body
+  token: (claims)->
+    claims["iss"] = @options.id
+    token = jsrsasign.jws.JWS.sign(
+      null,
+      {alg: "HS256", cty: "JWT"},
+      JSON.stringify(claims),
+      { rstr: @options.secret }
+    )
+    token
   upload: (image, album_id, metadatas = {})->
     claims = {
       "abilities": {}
@@ -59,15 +68,22 @@ class Sharinpix
           claims
         ).then (res)->
           res
-  token: (claims)->
-    claims["iss"] = @options.id
-    token = jsrsasign.jws.JWS.sign(
-      null,
-      {alg: "HS256", cty: "JWT"},
-      JSON.stringify(claims),
-      { rstr: @options.secret }
-    )
-    token
+  import: (url, album_id, metadatas = {})->
+    claims = {
+      "abilities": {
+        "#{album_id}": {
+          "Access":
+            see: true,
+            image_upload: true
+        }
+      }
+    }
+    @post("/imports", {
+      import_type: 'url'
+      album_id: album_id
+      url: url
+      metadatas: metadatas
+    }, claims)
   multiupload: (csv_path, callback)->
     contentStream = fs.createReadStream(csv_path)
     uploads = []
@@ -77,13 +93,19 @@ class Sharinpix
         album_id = data[1]  # Valid Salesforce ID (18-character)
         if file_path && album_id
           uploads.push (callback)=>
-            unless path.isAbsolute(file_path)
-              file_path = path.join csv_path, "../#{file_path}"
-            @upload(file_path, album_id)
-              .then (image)->
-                callback(null, image)
+            if file_path[0..3] == 'http'
+              @import(file_path, album_id).then (res)->
+                callback(null, res)
               .catch (err)->
                 callback(err)
+            else
+              unless path.isAbsolute(file_path)
+                file_path = path.join csv_path, "../#{file_path}"
+              @upload(file_path, album_id)
+                .then (image)->
+                  callback(null, image)
+                .catch (err)->
+                  callback(err)
       .on 'end', ->
         async.parallelLimit uploads, 2, callback
     contentStream.pipe csvStream
@@ -113,6 +135,8 @@ Sharinpix.get_instance = ->
   return _singleton if _singleton?
   _singleton = new Sharinpix(Sharinpix.configure())
 
+Sharinpix.import = ->
+  Sharinpix.get_instance().import arguments...
 Sharinpix.upload = ->
   Sharinpix.get_instance().upload arguments...
 Sharinpix.multiupload = ->
