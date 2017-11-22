@@ -1,7 +1,6 @@
 jsrsasign = require 'jsrsasign'
 superagent = require 'superagent'
 url = require 'url'
-fs = require 'fs'
 path = require 'path'
 async = require 'async'
 fastCsv = require 'fast-csv'
@@ -84,13 +83,12 @@ class Sharinpix
       url: url
       metadatas: metadatas
     }, claims)
-  multiupload: (csv_path, callback)->
-    contentStream = fs.createReadStream(csv_path)
+  multiupload: (csv_string, multiupload_callback)->
     uploads = []
-    csvStream = fastCsv()
+    fastCsv.fromString(csv_string)
       .on 'data', (data)=>
-        file_path = data[0] # Valid image path
-        album_id = data[1]  # Valid Salesforce ID (18-character)
+        file_path = data[0]
+        album_id = data[1]
         if file_path && album_id
           uploads.push (callback)=>
             if file_path[0..3] == 'http'
@@ -107,8 +105,7 @@ class Sharinpix
                 .catch (err)->
                   callback(err)
       .on 'end', ->
-        async.parallelLimit uploads, 2, callback
-    contentStream.pipe csvStream
+        async.parallelLimit uploads, 2, multiupload_callback
 
 _options = undefined
 Sharinpix.configure = (options)->

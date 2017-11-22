@@ -1,3 +1,4 @@
+fs = require 'fs'
 Sharinpix = require '../src/sharinpix.js'
 
 module.exports = ->
@@ -33,8 +34,9 @@ module.exports = ->
     when 'multiupload'
       csv_filename = process.argv[3]
       if csv_filename
-        Sharinpix.multiupload csv_filename
-        console.log 'CSV File is being processed'
+        fs.readFile csv_filename, (err, data)->
+          console.log 'CSV File is being processed'
+          Sharinpix.multiupload data
       else
         console.log 'Wrong parameters'
     else
