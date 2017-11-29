@@ -51,6 +51,7 @@
     "coffee-script": "1.10.0",
     "fast-csv": "^2.4.1",
     "jsrsasign": "5.0.12",
+    "promise-polyfill": "^6.1.0",
     "superagent": "2.0.0"
   }
 }

@@ -4,6 +4,7 @@ url = require 'url'
 path = require 'path'
 async = require 'async'
 fastCsv = require 'fast-csv'
+Promise = require('promise-polyfill')
 
 class Sharinpix
   constructor: (@options)->
@@ -17,13 +18,22 @@ class Sharinpix
       .send(body)
       .then (res)->
         res.body
-  get: (endpoint, claims)->
+  get: (endpoint, claims={admin: true})->
     superagent
       .get(@api_url(endpoint))
       .set('Authorization', "Token token=\"#{@token(claims)}\"")
       .set('Accept', 'application/json')
       .then (res)->
         res.body
+  delete: (endpoint, claims={admin: true})->
+    return new Promise (resolve, reject)=>
+      superagent
+        .delete(@api_url(endpoint))
+        .set('Authorization', "Token token=\"#{@token(claims)}\"")
+        .set('Accept', 'application/json')
+        .end (res)->
+          resolve(true) if res.status == 404 || res.status == 201
+          reject(false, res)
   token: (claims)->
     claims["iss"] = @options.id
     token = jsrsasign.jws.JWS.sign(
@@ -33,6 +43,8 @@ class Sharinpix
       { rstr: @options.secret }
     )
     token
+  image_delete: (image_id)->
+    @delete("/images/#{image_id}")
   upload: (image, album_id, metadatas = {})->
     claims = {
       "abilities": {}
@@ -42,7 +54,6 @@ class Sharinpix
         see: true,
         image_upload: true
     }
-    # console.log "https://app.sharinpix.com/
     # pagelayout/#{album_id}?token=#{@token(claims)}"
     @get("/albums/#{album_id}", claims)
       .then (album)->
@@ -68,15 +79,6 @@ class Sharinpix
         ).then (res)->
           res
   import: (url, album_id, metadatas = {})->
-    claims = {
-      "abilities": {
-        "#{album_id}": {
-          "Access":
-            see: true,
-            image_upload: true
-        }
-      }
-    }
     @post("/imports", {
       import_type: 'url'
       album_id: album_id
@@ -90,7 +92,7 @@ class Sharinpix
         file_path = data[0]
         album_id = data[1]
         if file_path && album_id
-          uploads.push (callback)=>
+          uploads.push async.reflect((callback)=>
             if file_path[0..3] == 'http'
               @import(file_path, album_id).then (res)->
                 callback(null, res)
@@ -104,6 +106,7 @@ class Sharinpix
                   callback(null, image)
                 .catch (err)->
                   callback(err)
+          )
       .on 'end', ->
         async.parallelLimit uploads, 2, multiupload_callback
 
@@ -138,5 +141,7 @@ Sharinpix.upload = ->
   Sharinpix.get_instance().upload arguments...
 Sharinpix.multiupload = ->
   Sharinpix.get_instance().multiupload arguments...
+Sharinpix.image_delete = ->
+  Sharinpix.get_instance().image_delete arguments...
 
 module.exports = Sharinpix

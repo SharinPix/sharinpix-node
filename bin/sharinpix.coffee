@@ -19,6 +19,9 @@ module.exports = ->
           console.log error, 'ERROR'
       else
         console.log 'Wrong parameters'
+    when 'images:delete'
+      Sharinpix.image_delete(process.argv[3]).then (res)->
+        console.log res
     when 'upload'
       image = process.argv[3]
       albumId = process.argv[4]
