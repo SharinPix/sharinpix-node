@@ -75,10 +75,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	exports.default = {};
 	;
 	(0, _jquery2.default)(function () {
-	  return (0, _jquery2.default)('input#files').change(function (e) {
+	  (0, _jquery2.default)('#sharinpixurl').change(function (e) {
+	    return window.sharinpix.configure((0, _jquery2.default)('#sharinpixurl').val());
+	  });
+	  (0, _jquery2.default)('#upload').change(function (e) {
 	    var file, i, len, ref, results;
-	    window.sharinpix.configure((0, _jquery2.default)('#sharinpixurl').val());
-	    console.log((0, _jquery2.default)('#sharinpixurl').val());
 	    ref = this.files;
 	    results = [];
 	    for (i = 0, len = ref.length; i < len; i++) {
@@ -88,6 +89,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	      }).then(function (image) {
 	        return console.log(image);
 	      }));
+	    }
+	    return results;
+	  });
+	  return (0, _jquery2.default)('#import').change(function (e) {
+	    var file, i, len, reader, ref, results;
+	    ref = this.files;
+	    results = [];
+	    for (i = 0, len = ref.length; i < len; i++) {
+	      file = ref[i];
+	      console.log(file);
+	      reader = new FileReader();
+	      reader.onload = function (e) {
+	        return window.sharinpix.multiupload(e.target.result, 'super_test', function (done) {
+	          return console.log('Import done !');
+	        });
+	      };
+	      results.push(reader.readAsText(file));
 	    }
 	    return results;
 	  });

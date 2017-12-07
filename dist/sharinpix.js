@@ -56,7 +56,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
 
-	var Sharinpix, _options, _singleton, async, fastCsv, fs, jsrsasign, path, superagent, url;
+	var Promise, Sharinpix, _options, _singleton, async, fastCsv, jsrsasign, path, superagent, url;
 
 	jsrsasign = __webpack_require__(7);
 
@@ -64,13 +64,13 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	url = __webpack_require__(19);
 
-	fs = __webpack_require__(12);
-
 	path = __webpack_require__(25);
 
 	async = __webpack_require__(26);
 
 	fastCsv = __webpack_require__(28);
+
+	Promise = __webpack_require__(71);
 
 	Sharinpix = function () {
 	  function Sharinpix(options1) {
@@ -82,15 +82,59 @@ return /******/ (function(modules) { // webpackBootstrap
 	  };
 
 	  Sharinpix.prototype.post = function (endpoint, body, claims) {
+	    if (claims == null) {
+	      claims = {
+	        admin: true
+	      };
+	    }
 	    return superagent.post(this.api_url(endpoint)).set('Authorization', "Token token=\"" + this.token(claims) + "\"").set('Accept', 'application/json').send(body).then(function (res) {
 	      return res.body;
 	    });
 	  };
 
 	  Sharinpix.prototype.get = function (endpoint, claims) {
+	    if (claims == null) {
+	      claims = {
+	        admin: true
+	      };
+	    }
 	    return superagent.get(this.api_url(endpoint)).set('Authorization', "Token token=\"" + this.token(claims) + "\"").set('Accept', 'application/json').then(function (res) {
 	      return res.body;
 	    });
+	  };
+
+	  Sharinpix.prototype["delete"] = function (endpoint, claims) {
+	    if (claims == null) {
+	      claims = {
+	        admin: true
+	      };
+	    }
+	    return new Promise(function (_this) {
+	      return function (resolve, reject) {
+	        return superagent["delete"](_this.api_url(endpoint)).set('Authorization', "Token token=\"" + _this.token(claims) + "\"").set('Accept', 'application/json').end(function (res) {
+	          if (res.status === 404 || res.status === 201) {
+	            resolve(true);
+	          }
+	          return reject(false, res);
+	        });
+	      };
+	    }(this));
+	  };
+
+	  Sharinpix.prototype.token = function (claims) {
+	    var token;
+	    claims["iss"] = this.options.id;
+	    token = jsrsasign.jws.JWS.sign(null, {
+	      alg: "HS256",
+	      cty: "JWT"
+	    }, JSON.stringify(claims), {
+	      rstr: this.options.secret
+	    });
+	    return token;
+	  };
+
+	  Sharinpix.prototype.image_delete = function (image_id) {
+	    return this["delete"]("/images/" + image_id);
 	  };
 
 	  Sharinpix.prototype.upload = function (image, album_id, metadatas) {
@@ -136,44 +180,50 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }(this));
 	  };
 
-	  Sharinpix.prototype.token = function (claims) {
-	    var token;
-	    claims["iss"] = this.options.id;
-	    token = jsrsasign.jws.JWS.sign(null, {
-	      alg: "HS256",
-	      cty: "JWT"
-	    }, JSON.stringify(claims), {
-	      rstr: this.options.secret
-	    });
-	    return token;
+	  Sharinpix.prototype["import"] = function (url, album_id, metadatas) {
+	    if (metadatas == null) {
+	      metadatas = {};
+	    }
+	    return this.post("/imports", {
+	      import_type: 'url',
+	      album_id: album_id,
+	      url: url,
+	      metadatas: metadatas
+	    }, claims);
 	  };
 
-	  Sharinpix.prototype.multiupload = function (csv_path, callback) {
-	    var contentStream, csvStream, uploads;
-	    contentStream = fs.createReadStream(csv_path);
+	  Sharinpix.prototype.multiupload = function (csv_string, multiupload_callback) {
+	    var uploads;
 	    uploads = [];
-	    csvStream = fastCsv().on('data', function (_this) {
+	    return fastCsv.fromString(csv_string).on('data', function (_this) {
 	      return function (data) {
 	        var album_id, file_path;
 	        file_path = data[0];
 	        album_id = data[1];
 	        if (file_path && album_id) {
-	          return uploads.push(function (callback) {
-	            if (!path.isAbsolute(file_path)) {
-	              file_path = path.join(csv_path, "../" + file_path);
+	          return uploads.push(async.reflect(function (callback) {
+	            if (file_path.slice(0, 4) === 'http') {
+	              return _this["import"](file_path, album_id).then(function (res) {
+	                return callback(null, res);
+	              })["catch"](function (err) {
+	                return callback(err);
+	              });
+	            } else {
+	              if (!path.isAbsolute(file_path)) {
+	                file_path = path.join(csv_path, "../" + file_path);
+	              }
+	              return _this.upload(file_path, album_id).then(function (image) {
+	                return callback(null, image);
+	              })["catch"](function (err) {
+	                return callback(err);
+	              });
 	            }
-	            return _this.upload(file_path, album_id).then(function (image) {
-	              return callback(null, image);
-	            })["catch"](function (err) {
-	              return callback(err);
-	            });
-	          });
+	          }));
 	        }
 	      };
 	    }(this)).on('end', function () {
-	      return async.parallelLimit(uploads, 2, callback);
+	      return async.parallelLimit(uploads, 2, multiupload_callback);
 	    });
-	    return contentStream.pipe(csvStream);
 	  };
 
 	  return Sharinpix;
@@ -215,6 +265,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	  return _singleton = new Sharinpix(Sharinpix.configure());
 	};
 
+	Sharinpix["import"] = function () {
+	  var ref;
+	  return (ref = Sharinpix.get_instance())["import"].apply(ref, arguments);
+	};
+
 	Sharinpix.upload = function () {
 	  var ref;
 	  return (ref = Sharinpix.get_instance()).upload.apply(ref, arguments);
@@ -223,6 +278,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	Sharinpix.multiupload = function () {
 	  var ref;
 	  return (ref = Sharinpix.get_instance()).multiupload.apply(ref, arguments);
+	};
+
+	Sharinpix.image_delete = function () {
+	  var ref;
+	  return (ref = Sharinpix.get_instance()).image_delete.apply(ref, arguments);
 	};
 
 	module.exports = Sharinpix;
@@ -21189,6 +21249,246 @@ return /******/ (function(modules) { // webpackBootstrap
 	exports.defaultTransform = defaultTransform;
 
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(8).Buffer))
+
+/***/ },
+/* 71 */
+/***/ function(module, exports, __webpack_require__) {
+
+	/* WEBPACK VAR INJECTION */(function(setImmediate) {(function (root) {
+
+	  // Store setTimeout reference so promise-polyfill will be unaffected by
+	  // other code modifying setTimeout (like sinon.useFakeTimers())
+	  var setTimeoutFunc = setTimeout;
+
+	  function noop() {}
+	  
+	  // Polyfill for Function.prototype.bind
+	  function bind(fn, thisArg) {
+	    return function () {
+	      fn.apply(thisArg, arguments);
+	    };
+	  }
+
+	  function Promise(fn) {
+	    if (!(this instanceof Promise)) throw new TypeError('Promises must be constructed via new');
+	    if (typeof fn !== 'function') throw new TypeError('not a function');
+	    this._state = 0;
+	    this._handled = false;
+	    this._value = undefined;
+	    this._deferreds = [];
+
+	    doResolve(fn, this);
+	  }
+
+	  function handle(self, deferred) {
+	    while (self._state === 3) {
+	      self = self._value;
+	    }
+	    if (self._state === 0) {
+	      self._deferreds.push(deferred);
+	      return;
+	    }
+	    self._handled = true;
+	    Promise._immediateFn(function () {
+	      var cb = self._state === 1 ? deferred.onFulfilled : deferred.onRejected;
+	      if (cb === null) {
+	        (self._state === 1 ? resolve : reject)(deferred.promise, self._value);
+	        return;
+	      }
+	      var ret;
+	      try {
+	        ret = cb(self._value);
+	      } catch (e) {
+	        reject(deferred.promise, e);
+	        return;
+	      }
+	      resolve(deferred.promise, ret);
+	    });
+	  }
+
+	  function resolve(self, newValue) {
+	    try {
+	      // Promise Resolution Procedure: https://github.com/promises-aplus/promises-spec#the-promise-resolution-procedure
+	      if (newValue === self) throw new TypeError('A promise cannot be resolved with itself.');
+	      if (newValue && (typeof newValue === 'object' || typeof newValue === 'function')) {
+	        var then = newValue.then;
+	        if (newValue instanceof Promise) {
+	          self._state = 3;
+	          self._value = newValue;
+	          finale(self);
+	          return;
+	        } else if (typeof then === 'function') {
+	          doResolve(bind(then, newValue), self);
+	          return;
+	        }
+	      }
+	      self._state = 1;
+	      self._value = newValue;
+	      finale(self);
+	    } catch (e) {
+	      reject(self, e);
+	    }
+	  }
+
+	  function reject(self, newValue) {
+	    self._state = 2;
+	    self._value = newValue;
+	    finale(self);
+	  }
+
+	  function finale(self) {
+	    if (self._state === 2 && self._deferreds.length === 0) {
+	      Promise._immediateFn(function() {
+	        if (!self._handled) {
+	          Promise._unhandledRejectionFn(self._value);
+	        }
+	      });
+	    }
+
+	    for (var i = 0, len = self._deferreds.length; i < len; i++) {
+	      handle(self, self._deferreds[i]);
+	    }
+	    self._deferreds = null;
+	  }
+
+	  function Handler(onFulfilled, onRejected, promise) {
+	    this.onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : null;
+	    this.onRejected = typeof onRejected === 'function' ? onRejected : null;
+	    this.promise = promise;
+	  }
+
+	  /**
+	   * Take a potentially misbehaving resolver function and make sure
+	   * onFulfilled and onRejected are only called once.
+	   *
+	   * Makes no guarantees about asynchrony.
+	   */
+	  function doResolve(fn, self) {
+	    var done = false;
+	    try {
+	      fn(function (value) {
+	        if (done) return;
+	        done = true;
+	        resolve(self, value);
+	      }, function (reason) {
+	        if (done) return;
+	        done = true;
+	        reject(self, reason);
+	      });
+	    } catch (ex) {
+	      if (done) return;
+	      done = true;
+	      reject(self, ex);
+	    }
+	  }
+
+	  Promise.prototype['catch'] = function (onRejected) {
+	    return this.then(null, onRejected);
+	  };
+
+	  Promise.prototype.then = function (onFulfilled, onRejected) {
+	    var prom = new (this.constructor)(noop);
+
+	    handle(this, new Handler(onFulfilled, onRejected, prom));
+	    return prom;
+	  };
+
+	  Promise.all = function (arr) {
+	    return new Promise(function (resolve, reject) {
+	      if (!arr || typeof arr.length === 'undefined') throw new TypeError('Promise.all accepts an array');
+	      var args = Array.prototype.slice.call(arr);
+	      if (args.length === 0) return resolve([]);
+	      var remaining = args.length;
+
+	      function res(i, val) {
+	        try {
+	          if (val && (typeof val === 'object' || typeof val === 'function')) {
+	            var then = val.then;
+	            if (typeof then === 'function') {
+	              then.call(val, function (val) {
+	                res(i, val);
+	              }, reject);
+	              return;
+	            }
+	          }
+	          args[i] = val;
+	          if (--remaining === 0) {
+	            resolve(args);
+	          }
+	        } catch (ex) {
+	          reject(ex);
+	        }
+	      }
+
+	      for (var i = 0; i < args.length; i++) {
+	        res(i, args[i]);
+	      }
+	    });
+	  };
+
+	  Promise.resolve = function (value) {
+	    if (value && typeof value === 'object' && value.constructor === Promise) {
+	      return value;
+	    }
+
+	    return new Promise(function (resolve) {
+	      resolve(value);
+	    });
+	  };
+
+	  Promise.reject = function (value) {
+	    return new Promise(function (resolve, reject) {
+	      reject(value);
+	    });
+	  };
+
+	  Promise.race = function (values) {
+	    return new Promise(function (resolve, reject) {
+	      for (var i = 0, len = values.length; i < len; i++) {
+	        values[i].then(resolve, reject);
+	      }
+	    });
+	  };
+
+	  // Use polyfill for setImmediate for performance gains
+	  Promise._immediateFn = (typeof setImmediate === 'function' && function (fn) { setImmediate(fn); }) ||
+	    function (fn) {
+	      setTimeoutFunc(fn, 0);
+	    };
+
+	  Promise._unhandledRejectionFn = function _unhandledRejectionFn(err) {
+	    if (typeof console !== 'undefined' && console) {
+	      console.warn('Possible Unhandled Promise Rejection:', err); // eslint-disable-line no-console
+	    }
+	  };
+
+	  /**
+	   * Set the immediate function to execute callbacks
+	   * @param fn {function} Function to execute
+	   * @deprecated
+	   */
+	  Promise._setImmediateFn = function _setImmediateFn(fn) {
+	    Promise._immediateFn = fn;
+	  };
+
+	  /**
+	   * Change the function to execute on unhandled rejection
+	   * @param {function} fn Function to execute on unhandled rejection
+	   * @deprecated
+	   */
+	  Promise._setUnhandledRejectionFn = function _setUnhandledRejectionFn(fn) {
+	    Promise._unhandledRejectionFn = fn;
+	  };
+	  
+	  if (typeof module !== 'undefined' && module.exports) {
+	    module.exports = Promise;
+	  } else if (!root.Promise) {
+	    root.Promise = Promise;
+	  }
+
+	})(this);
+
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27).setImmediate))
 
 /***/ }
 /******/ ])
