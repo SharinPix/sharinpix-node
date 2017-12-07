@@ -29,9 +29,3 @@ csvStream = fastCsv()
       console.log 'DONE !'
 
 fs.createReadStream("import.csv").pipe(csvStream)
-
-# Sharinpix.upload('./sharinpix.jpg', 'super_test').then((image)->
-#   console.log image.public_id
-# , (err)->
-#   console.log 'ERROR !', err
-# )
