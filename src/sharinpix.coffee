@@ -59,8 +59,9 @@ class Sharinpix
       .then (album)->
         request = superagent
           .post(album.upload_form.url)
-        for key, value of album.upload_form.params
-          request.field(key, value)
+        if metadatas != {}
+          for key, value of album.upload_form.params
+            request.field(key, value)
         if File? and image instanceof File
           request.field('file', image)
         else
