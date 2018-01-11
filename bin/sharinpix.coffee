@@ -42,5 +42,20 @@ module.exports = ->
           Sharinpix.multiupload data
       else
         console.log 'Wrong parameters'
+    when 'upload_boxes_csv'
+      csvPath = process.argv[3]
+      albumId = process.argv[4]
+      outFile = process.argv[5]
+      if csvPath && albumId
+        Sharinpix.configure sharinpixSecretUrl
+        Sharinpix.upload_boxes_csv(fs.createReadStream(csvPath), albumId).then (results) ->
+          writeStream = fs.createWriteStream(outFile || 'sharinpix.log')
+          writeStream.write JSON.stringify(results)
+          writeStream.end()
+          console.log results, 'SUCCESS'
+        , (error) ->
+          console.log error, 'ERROR'
+      else
+        console.log 'Wrong parameters'
     else
       console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]\n  multiupload <csv file>'
