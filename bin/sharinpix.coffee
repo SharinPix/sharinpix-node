@@ -58,4 +58,4 @@ module.exports = ->
       else
         console.log 'Wrong parameters'
     else
-      console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]\n  multiupload <csv file>'
+      console.log 'Please use appropriate action. Available:\n  upload <image path> <album id> [<JSON metadatas>]\n  multiupload <csv file>\n  upload_boxes_csv <csv file> <album id> [<output log file>]'
