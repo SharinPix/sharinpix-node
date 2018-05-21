@@ -8,7 +8,7 @@
 
 Example of code :
 
-```
+``` javascript
 Sharinpix = require('sharinpix');
 Sharinpix.upload('./sharinpix.jpg', 'super_test').then(function(image){
   console.log(image.public_id);
@@ -16,6 +16,16 @@ Sharinpix.upload('./sharinpix.jpg', 'super_test').then(function(image){
   console.log(error);
 })
 
+```
+
+### Import from Url
+``` javascript
+Sharinpix = require('sharinpix');
+Sharinpix.import('https://test.sharinpix.com/image.jpg', 'super_test').then(function(image){
+  console.log(image.public_id);
+}, function(error){
+  console.log(error);
+})
 ```
 
 Authentification :
