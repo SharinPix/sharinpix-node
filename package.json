@@ -1,0 +1,38 @@
+{
+  "name": "sharinpix-import",
+  "version": "1.0.0",
+  "description": "Lightweight Node Package to import images using SharinPix.",
+  "main": "sharinpix-import",
+  "scripts": {
+    "test": "sharinpix-import"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SharinPix/sharinpix-import.git"
+  },
+  "keywords": [
+    "Photos",
+    "SharinPix",
+    "Salesforce",
+    "Images"
+  ],
+  "author": "SharinPix",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SharinPix/sharinpix-import/issues"
+  },
+  "bin": {
+    "sharinpix-import": "./bin/sharinpix-import"
+  },
+  "homepage": "https://github.com/SharinPix/sharinpix-import#readme",
+  "dependencies": {
+    "async": "^2.6.1",
+    "coffeescript": "^2.3.1",
+    "fast-csv": "^2.4.1",
+    "lodash": "^4.17.10",
+    "sharinpix": "0.0.8"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.3"
+  }
+}
