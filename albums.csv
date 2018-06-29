@@ -1,2 +1,2 @@
-0010Y00000Wf1btQAB;http://lorempixel.com/400/200/sports/;foo,bar,dim;{"super_key":"data"}
-0010Y00000Wf1btQAB;http://lorempixel.com/400/200/sports/;building,car,house;{"super_key_1":"data_1"}
+album_id;http://lorempixel.com/400/200/sports/;tag1,tag2,tag3;{"super_key":"data"}
+album_id;http://lorempixel.com/400/200/sports/;building,car,house;{"super_key_1":"data_1"}
