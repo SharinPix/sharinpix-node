@@ -7,7 +7,7 @@
 $ npm install --save sharinpix-import
 ```
 
-### Example of code :
+#### Example of code :
 ``` javascript
 sharinpixImport = require('sharinpix-import');
 sharinpixImport.importAlbum('albums.csv', 'success.csv', 'error.csv');
