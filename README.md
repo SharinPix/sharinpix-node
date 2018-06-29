@@ -1,6 +1,8 @@
 # SharinPix Import
 
-## Installation
+### Code usage
+
+#### Installation
 ```sh 
 $ npm install --save sharinpix-import
 ```
@@ -12,8 +14,14 @@ sharinpixImport.importAlbum('albums.csv', 'success.csv', 'error.csv');
 ```
 ### Command-line Usage
 
+#### Installation
+
 ```sh
-    $ sharinpix-import albums.csv success.csv error.csv
+$ npm install -g sharinpix-import
+```
+
+```sh
+$ sharinpix-import albums.csv success.csv error.csv
 ```
 
 - ``` albums.csv ``` refers to the  path of the file containing the images to be imported.
