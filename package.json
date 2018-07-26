@@ -25,7 +25,7 @@
   "bin": {
     "sharinpix": "./bin/sharinpix"
   },
-  "homepage": "https://github.com/sharinpix/sharinpix#readme",
+  "homepage": "https://github.com/sharinpix/sharinpix-node#readme",
   "devDependencies": {
     "babel-core": "6.9.1",
     "babel-loader": "6.2.4",
