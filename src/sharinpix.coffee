@@ -1,10 +1,12 @@
-jsrsasign = require 'jsrsasign'
-superagent = require 'superagent'
 url = require 'url'
+_ = require 'lodash'
 path = require 'path'
 async = require 'async'
 fastCsv = require 'fast-csv'
-Promise = require('promise-polyfill')
+Promise = require 'promise-polyfill'
+jsrsasign = require 'jsrsasign'
+superagent = require 'superagent'
+convertCsv = require './utils/convert-csv'
 
 class Sharinpix
   constructor: (@options)->
@@ -109,6 +111,127 @@ class Sharinpix
           )
       .on 'end', ->
         async.parallelLimit uploads, 2, multiupload_callback
+  uploadBoxesCsv: (bufferStream, albumId) ->
+    new Promise (resolve, reject) =>
+      parallelRequests = (tasks, limit, callback) ->
+        async.parallelLimit tasks, limit, (err, results) ->
+          callback err, results
+          return
+        return
+      convertCsv bufferStream, (data) =>
+        abilities = {}
+        # check import status
+        checkImports = (importResults) =>
+          importTasks = []
+          _.each importResults, (importVal) =>
+            if importVal['value'] == undefined
+              return
+            imp = importVal.value
+            importTasks.push (callback) =>
+              async.retry {
+                errorFilter: (err) =>
+                  err.image_id == null
+                interval: 3000
+                times: 20
+              }, ((done) =>
+                @get('/imports/' + imp.id, admin: true).then ((impResult) =>
+                  if impResult.image_id == null
+                    done impResult
+                  else
+                    done null, impResult
+                  return
+                ), (impError) =>
+                  done null, {}
+                  return
+                return
+              ), (err, result) =>
+                # if err != undefined and err != null and err.length > 0
+                #   console.log '############## import status error : ' + JSON.stringify(err)
+                # if result != undefined and result != null and result.length > 0
+                #   console.log '############## import status result : ' + result
+                callback err, result
+                return
+              return
+            return
+          parallelRequests importTasks, 5, (errors, results) =>
+            if results != null and results.length > 0
+              createBox results
+            if errors != null and errors.length > 0
+              console.log '### import errors: ' + errors.length
+            return
+          return
+        createBox = (importRes) =>
+          boxTasks = []
+          _.each importRes, (imp) =>
+            if imp == undefined or imp == null or imp == {} or imp.image_id == null
+              console.log 'there was an error on imp here'
+            else
+              image = data[imp.params.metadatas.externalId]
+              einsteinBoxes = image.boxes
+              _.each einsteinBoxes, (box) =>
+                box.image_id = imp.image_id
+                boxTasks.push async.reflect((callback) =>
+                  @post('/images/' + imp.image_id + '/einstein_box', box, claims).then ((res) =>
+                    callback null, res
+                    return
+                  ), (err) =>
+                    callback err, null
+                    return
+                  return
+                )
+                return
+            return
+          setTimeout (=>
+            # console.log 'wait 10s'
+            parallelRequests boxTasks, 5, (err, result) =>
+              if err
+                reject err
+              else
+                resolve result
+              return
+            return
+          ), 10000
+          return
+        abilities[albumId] = Access:
+          see: true
+          image_upload: true
+          einstein_box: true
+        claims = abilities: abilities
+        parallelTasks = []
+        # creating imports
+        _.each data, (item, key) =>
+          # console.log(key);
+          body = 
+            album_id: albumId
+            filename: item.image_name
+            url: item.image_url
+            import_type: 'url'
+            metadatas: externalId: key
+          parallelTasks.push async.reflect((callback) =>
+            @post('/imports', body, claims).then ((res) =>
+              if res == null
+                # console.log JSON.stringify(body)
+                callback body, null
+              else
+                callback null,
+                  id: res.id
+                  external_id: key
+              return
+            ), (err) =>
+              callback body, null
+              return
+            return
+          )
+          return
+        parallelRequests parallelTasks, 5, (errors, results) =>
+          if results != null and results.length > 0
+            console.log '@@@@ import success: ' + JSON.stringify(results)
+            checkImports results
+          if errors != null and errors.length > 0
+            console.log '@@@@ errors success: ' + errors.length
+          return
+        return
+      return
 
 _options = undefined
 Sharinpix.configure = (options)->
@@ -143,5 +266,7 @@ Sharinpix.multiupload = ->
   Sharinpix.get_instance().multiupload arguments...
 Sharinpix.image_delete = ->
   Sharinpix.get_instance().image_delete arguments...
+Sharinpix.upload_boxes_csv = ->
+  Sharinpix.get_instance().uploadBoxesCsv arguments...
 
 module.exports = Sharinpix
