@@ -92,6 +92,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	    });
 	  };
 
+	  Sharinpix.prototype.put = function (endpoint, body, claims) {
+	    if (claims == null) {
+	      claims = {
+	        admin: true
+	      };
+	    }
+	    return superagent.put(this.api_url(endpoint)).set('Authorization', "Token token=\"" + this.token(claims) + "\"").set('Accept', 'application/json').send(body).then(function (res) {
+	      return res.body;
+	    });
+	  };
+
 	  Sharinpix.prototype.get = function (endpoint, claims) {
 	    if (claims == null) {
 	      claims = {

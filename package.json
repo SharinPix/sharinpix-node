@@ -27,9 +27,9 @@
   },
   "homepage": "https://github.com/sharinpix/sharinpix-node#readme",
   "devDependencies": {
-    "babel-core": "6.9.1",
+    "babel-core": "^6.26.3",
     "babel-loader": "6.2.4",
-    "babel-preset-es2015": "6.9.0",
+    "babel-preset-es2015": "^6.24.1",
     "bootstrap-sass": "3.3.6",
     "coffee-loader": "0.7.2",
     "coffeelint": "1.15.7",
@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "async": "^2.5.0",
-    "coffee-script": "1.10.0",
+    "coffeescript": "^2.3.1",
     "fast-csv": "^2.4.1",
     "jsrsasign": "5.0.12",
     "promise-polyfill": "^6.1.0",
