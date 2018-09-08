@@ -1,3 +1,3 @@
-require('coffee-script/register')
+require('coffeescript/register')
 Sharinpix = require('./sharinpix.coffee');
 module.exports = Sharinpix;

@@ -18,6 +18,14 @@ class Sharinpix
       .send(body)
       .then (res)->
         res.body
+  put: (endpoint, body, claims={admin: true})->
+    superagent
+      .put(@api_url(endpoint))
+      .set('Authorization', "Token token=\"#{@token(claims)}\"")
+      .set('Accept', 'application/json')
+      .send(body)
+      .then (res)->
+        res.body
   get: (endpoint, claims={admin: true})->
     superagent
       .get(@api_url(endpoint))
