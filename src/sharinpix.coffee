@@ -92,7 +92,7 @@ class Sharinpix
       album_id: album_id
       url: url
       metadatas: metadatas
-    }, claims)
+    })
   multiupload: (csv_string, multiupload_callback)->
     uploads = []
     fastCsv.fromString(csv_string)

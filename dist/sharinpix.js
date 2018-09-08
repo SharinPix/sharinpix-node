@@ -189,7 +189,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	      album_id: album_id,
 	      url: url,
 	      metadatas: metadatas
-	    }, claims);
+	    });
 	  };
 
 	  Sharinpix.prototype.multiupload = function (csv_string, multiupload_callback) {
