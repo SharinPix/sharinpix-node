@@ -1,8 +1,7 @@
-coffeelint.json
-index.html
-src/demo*
-src/index*
-webpack.config.js
-dist/demo*
+test.js
+import_tags.js
+sharinpix.jpg
 .git*
-.npmignore
+.DS_Store
+output.json
+sharinpix.log

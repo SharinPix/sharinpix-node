@@ -1,53 +1,86 @@
-# Sharinpix client.
+# SharinPix Client
+
+Node.js client library and CLI for the SharinPix API.
 
 ## Installation
 
-
-```npm install --save sharinpix```
-
-
-Example of code :
-
-``` javascript
-Sharinpix = require('sharinpix');
-Sharinpix.upload('./sharinpix.jpg', 'super_test').then(function(image){
-  console.log(image.public_id);
-}, function(error){
-  console.log(error);
-})
-
+```bash
+npm install sharinpix
 ```
 
-### Import from Url
-``` javascript
-Sharinpix = require('sharinpix');
-Sharinpix.import('https://test.sharinpix.com/image.jpg', 'super_test').then(function(image){
-  console.log(image.public_id);
-}, function(error){
-  console.log(error);
-})
+## Configuration
+
+Set the `SHARINPIX_URL` environment variable with your SharinPix secret URL:
+
+```bash
+export SHARINPIX_URL="https://<id>:<secret>@<api-host>/api/v1"
 ```
 
-Authentification :
+Or configure programmatically:
 
-Set the environement variable SHARINPIX_URL with the url of your secret or call
-configure like this :
-
-
-```
-Sharinpix.configure('<Sharinpix-secret-url>');
+```javascript
+const Sharinpix = require('sharinpix');
+Sharinpix.configure('https://<id>:<secret>@<api-host>/api/v1');
 ```
 
-# SharinPix command line tool
+## Usage
 
-## Installing SharinPix globally
+### Upload an image
 
-`npm install -g sharinpix`
+```javascript
+const Sharinpix = require('sharinpix');
 
-## Set environment variable
+const image = await Sharinpix.upload('./photo.jpg', 'album_id');
+console.log(image.public_id);
+```
 
-Run `export SHARINPIX_URL="YOUR_SHARINPIX_SECRET_URL"` on your terminal or set `SHARINPIX_URL` permanently to your enviroment variable.
+### Import from URL
 
-## Upload
+```javascript
+const image = await Sharinpix.import('https://example.com/photo.jpg', 'album_id');
+console.log(image.public_id);
+```
 
-Run `sharinpix upload <image path> <album id> [<json metadatas>]` on your terminal.
+### Delete an image
+
+```javascript
+await Sharinpix.imageDelete('image_id');
+```
+
+### Bulk upload from CSV
+
+```javascript
+const fs = require('fs');
+const csv = fs.readFileSync('uploads.csv', 'utf8');
+const results = await Sharinpix.multiupload(csv);
+```
+
+CSV format: `<file_path_or_url>,<album_id>` (one per line).
+
+## CLI
+
+### Install globally
+
+```bash
+npm install -g sharinpix
+```
+
+### Commands
+
+```bash
+# Upload a local image
+sharinpix upload <image-path> <album-id> [metadatas-json]
+
+# Import from URL
+sharinpix import <url> <album-id> [metadatas-json]
+
+# Delete an image
+sharinpix images:delete <image-id>
+
+# Bulk upload from CSV
+sharinpix multiupload <csv-file>
+```
+
+## License
+
+MIT
